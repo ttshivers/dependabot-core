@@ -459,8 +459,15 @@ module Dependabot
         previous_ref(dependency) != new_ref(dependency)
       end
 
+      # TODO: Bring this in line with existing library checks that we do in the
+      # update checkers, which are also overriden by passing an explicit
+      # `requirements_update_strategy`.
+      #
+      # TODO re-use in BranchNamer
       def library?
-        return true if files.map(&:name).any? { |nm| nm.end_with?(".gemspec") }
+        gemspecs = files.map(&:name).select { |nm| nm.end_with?(".gemspec") }
+        # Reject changed gemspecs from the vendor cache folder (from git deps)
+        return true if gemspecs.reject { |nm| nm.start_with?("vendor/") }.any?
 
         dependencies.any? { |d| previous_version(d).nil? }
       end
