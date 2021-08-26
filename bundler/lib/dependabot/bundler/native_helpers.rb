@@ -8,18 +8,18 @@ module Dependabot
     module NativeHelpers
       def self.run_bundler_subprocess(function:, args:, bundler_version:)
         # Run helper suprocess with all bundler-related ENV variables removed
+        bundler_major_version = bundler_version.split(".").first
         ::Bundler.with_original_env do
           SharedHelpers.run_helper_subprocess(
-            command: helper_path(bundler_version: bundler_version),
+            command: helper_path(bundler_version: bundler_major_version),
             function: function,
             args: args,
             env: {
               # Bundler will pick the matching installed major version
               "BUNDLER_VERSION" => bundler_version,
-              "BUNDLE_GEMFILE" => File.join(versioned_helper_path(bundler_version: bundler_version), "Gemfile"),
-              "BUNDLE_PATH" => File.join(versioned_helper_path(bundler_version: bundler_version), ".bundle"),
+              "BUNDLE_GEMFILE" => File.join(versioned_helper_path(bundler_version: bundler_major_version), "Gemfile"),
               # Prevent the GEM_HOME from being set to a folder owned by root
-              "GEM_HOME" => File.join(versioned_helper_path(bundler_version: bundler_version), ".bundle")
+              "GEM_HOME" => File.join(versioned_helper_path(bundler_version: bundler_major_version), ".bundle")
             }
           )
         rescue SharedHelpers::HelperSubprocessFailed => e
@@ -36,7 +36,7 @@ module Dependabot
       end
 
       def self.helper_path(bundler_version:)
-        "ruby #{File.join(versioned_helper_path(bundler_version: bundler_version), 'run.rb')}"
+        "bundle exec ruby #{File.join(versioned_helper_path(bundler_version: bundler_version), 'run.rb')}"
       end
 
       def self.native_helpers_root
