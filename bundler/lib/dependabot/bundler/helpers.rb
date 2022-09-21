@@ -31,7 +31,7 @@ module Dependabot
         if (matches = lockfile.content.match(BUNDLER_MAJOR_VERSION_REGEX))
           matches[:version]
         else
-          FAILOVER
+          "1"
         end
       end
     end

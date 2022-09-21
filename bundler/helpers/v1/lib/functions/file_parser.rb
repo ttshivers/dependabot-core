@@ -1,3 +1,7 @@
+# frozen_string_literal: true
+
+require "uri"
+
 module Functions
   class FileParser
     def initialize(lockfile_name:)
@@ -10,13 +14,13 @@ module Functions
       Bundler::Definition.build(gemfile_name, nil, {}).
         dependencies.select(&:current_platform?).
         reject { |dep| dep.source.is_a?(Bundler::Source::Gemspec) }.
-        map(&method(:serialize_bundler_dependency))
+        map { |dep| serialize_bundler_dependency(dep) }
     end
 
     def parsed_gemspec(gemspec_name:)
       Bundler.load_gemspec_uncached(gemspec_name).
         dependencies.
-        map(&method(:serialize_bundler_dependency))
+        map { |dep| serialize_bundler_dependency(dep) }
     end
 
     private
@@ -39,7 +43,7 @@ module Functions
     end
 
     def source_from_lockfile(dependency_name)
-      parsed_lockfile&.specs.find { |s| s.name == dependency_name }&.source
+      parsed_lockfile&.specs&.find { |s| s.name == dependency_name }&.source
     end
 
     def source_for(dependency)
@@ -54,12 +58,8 @@ module Functions
       return nil if default_rubygems?(source)
 
       details = { type: source.class.name.split("::").last.downcase }
-      if source.is_a?(Bundler::Source::Git)
-        details.merge!(git_source_details(source))
-      end
-      if source.is_a?(Bundler::Source::Rubygems)
-        details[:url] = source.remotes.first.to_s
-      end
+      details.merge!(git_source_details(source)) if source.is_a?(Bundler::Source::Git)
+      details[:url] = source.remotes.first.to_s if source.is_a?(Bundler::Source::Rubygems)
       details
     end
 
@@ -71,11 +71,18 @@ module Functions
       }
     end
 
+    RUBYGEMS_HOSTS = [
+      "rubygems.org",
+      "www.rubygems.org"
+    ].freeze
+
     def default_rubygems?(source)
       return true if source.nil?
       return false unless source.is_a?(Bundler::Source::Rubygems)
 
-      source.remotes.any? { |r| r.to_s.include?("rubygems.org") }
+      source.remotes.any? do |r|
+        RUBYGEMS_HOSTS.include?(URI(r.to_s).host)
+      end
     end
 
     def serialize_bundler_dependency(dependency)

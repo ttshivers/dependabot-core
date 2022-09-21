@@ -3,6 +3,7 @@
 require "excon"
 
 require "dependabot/go_modules/update_checker"
+require "dependabot/update_checkers/version_filters"
 require "dependabot/shared_helpers"
 require "dependabot/errors"
 require "dependabot/go_modules/requirement"
@@ -18,29 +19,40 @@ module Dependabot
           # Package url 404s
           /404 Not Found/,
           /Repository not found/,
-          /unrecognized import path/
+          /unrecognized import path/,
+          /malformed module path/,
+          # (Private) module could not be fetched
+          /module .*: git ls-remote .*: exit status 128/m.freeze
         ].freeze
+        INVALID_VERSION_REGEX = /version "[^"]+" invalid/m.freeze
         PSEUDO_VERSION_REGEX = /\b\d{14}-[0-9a-f]{12}$/.freeze
 
         def initialize(dependency:, dependency_files:, credentials:,
-                       ignored_versions:, raise_on_ignored: false)
+                       ignored_versions:, security_advisories:, raise_on_ignored: false,
+                       goprivate:)
           @dependency          = dependency
           @dependency_files    = dependency_files
           @credentials         = credentials
           @ignored_versions    = ignored_versions
+          @security_advisories = security_advisories
           @raise_on_ignored    = raise_on_ignored
+          @goprivate           = goprivate
         end
 
         def latest_version
           @latest_version ||= fetch_latest_version
         end
 
+        def lowest_security_fix_version
+          @lowest_security_fix_version ||= fetch_lowest_security_fix_version
+        end
+
         private
 
-        attr_reader :dependency, :dependency_files, :credentials, :ignored_versions
+        attr_reader :dependency, :dependency_files, :credentials, :ignored_versions, :security_advisories
 
         def fetch_latest_version
-          return dependency.version if dependency.version =~ PSEUDO_VERSION_REGEX
+          return dependency.version if PSEUDO_VERSION_REGEX.match?(dependency.version)
 
           candidate_versions = available_versions
           candidate_versions = filter_prerelease_versions(candidate_versions)
@@ -49,26 +61,37 @@ module Dependabot
           candidate_versions.max
         end
 
+        def fetch_lowest_security_fix_version
+          return dependency.version if PSEUDO_VERSION_REGEX.match?(dependency.version)
+
+          relevant_versions = available_versions
+          relevant_versions = filter_prerelease_versions(relevant_versions)
+          relevant_versions = Dependabot::UpdateCheckers::VersionFilters.filter_vulnerable_versions(relevant_versions,
+                                                                                                    security_advisories)
+          relevant_versions = filter_ignored_versions(relevant_versions)
+          relevant_versions = filter_lower_versions(relevant_versions)
+
+          relevant_versions.min
+        end
+
         def available_versions
           SharedHelpers.in_a_temporary_directory do
             SharedHelpers.with_git_configured(credentials: credentials) do
-              File.write("go.mod", go_mod.content)
+              manifest = parse_manifest
 
-              # Turn off the module proxy for now, as it's causing issues with
-              # private git dependencies
-              env = { "GOPRIVATE" => "*" }
+              # Set up an empty go.mod so 'go list -m' won't attempt to download dependencies. This
+              # appears to be a side effect of operating with modules included in GOPRIVATE. We'll
+              # retain any exclude directives to omit those versions.
+              File.write("go.mod", "module dummy\n")
+              manifest["Exclude"]&.each do |r|
+                SharedHelpers.run_shell_command("go mod edit -exclude=#{r['Path']}@#{r['Version']}")
+              end
 
-              version_strings = SharedHelpers.run_helper_subprocess(
-                command: NativeHelpers.helper_path,
-                env: env,
-                function: "getVersions",
-                args: {
-                  dependency: {
-                    name: dependency.name,
-                    version: "v" + dependency.version
-                  }
-                }
-              )
+              # Turn off the module proxy for private dependencies
+              env = { "GOPRIVATE" => @goprivate }
+
+              versions_json = SharedHelpers.run_shell_command("go list -m -versions -json #{dependency.name}", env: env)
+              version_strings = JSON.parse(versions_json)["Versions"]
 
               return [version_class.new(dependency.version)] if version_strings.nil?
 
@@ -86,7 +109,9 @@ module Dependabot
 
         def handle_subprocess_error(error)
           if RESOLVABILITY_ERROR_REGEXES.any? { |rgx| error.message =~ rgx }
-            ResolvabilityErrors.handle(error.message, credentials: credentials)
+            ResolvabilityErrors.handle(error.message, credentials: credentials, goprivate: @goprivate)
+          elsif INVALID_VERSION_REGEX.match?(error.message)
+            raise Dependabot::DependencyFileNotResolvable, error.message
           end
 
           raise
@@ -100,6 +125,15 @@ module Dependabot
 
         def go_mod
           @go_mod ||= dependency_files.find { |f| f.name == "go.mod" }
+        end
+
+        def parse_manifest
+          SharedHelpers.in_a_temporary_directory do
+            File.write("go.mod", go_mod.content)
+            json = SharedHelpers.run_shell_command("go mod edit -json")
+
+            JSON.parse(json) || {}
+          end
         end
 
         def filter_prerelease_versions(versions_array)

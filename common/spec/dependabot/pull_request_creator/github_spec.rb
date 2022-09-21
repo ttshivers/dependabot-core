@@ -126,7 +126,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
                 headers: json_header)
 
     service_pack_url =
-      "https://github.com/gocardless/bump.git/info/refs"\
+      "https://github.com/gocardless/bump.git/info/refs" \
       "?service=git-upload-pack"
     stub_request(:get, service_pack_url).
       to_return(
@@ -325,7 +325,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
                     headers: json_header)
 
         service_pack_url =
-          "https://github.com/gocardless/bump.git/info/refs"\
+          "https://github.com/gocardless/bump.git/info/refs" \
           "?service=git-upload-pack"
         stub_request(:get, service_pack_url).to_return(status: 404)
       end
@@ -338,10 +338,14 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
 
     context "when we got a 401" do
       before do
-        service_pack_url =
-          "https://github.com/gocardless/bump.git/info/refs"\
-          "?service=git-upload-pack"
+        url = "https://github.com/gocardless/bump.git"
+        service_pack_url = "#{url}/info/refs?service=git-upload-pack"
+
         stub_request(:get, service_pack_url).to_return(status: 401)
+
+        exit_status = double(success?: false)
+        allow(Open3).to receive(:capture3).and_call_original
+        allow(Open3).to receive(:capture3).with(anything, "git ls-remote #{url}").and_return(["", "", exit_status])
       end
 
       it "raises a normal error" do
@@ -356,10 +360,14 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
                     body: fixture("github", "bump_repo.json"),
                     headers: json_header)
 
-        service_pack_url =
-          "https://github.com/gocardless/bump.git/info/refs"\
-          "?service=git-upload-pack"
+        url = "https://github.com/gocardless/bump.git"
+        service_pack_url = "#{url}/info/refs?service=git-upload-pack"
+
         stub_request(:get, service_pack_url).to_return(status: 404)
+
+        exit_status = double(success?: false)
+        allow(Open3).to receive(:capture3).and_call_original
+        allow(Open3).to receive(:capture3).with(anything, "git ls-remote #{url}").and_return(["", "", exit_status])
       end
 
       it "raises a normal error" do
@@ -369,15 +377,19 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
 
     context "when the repo exists but is disabled" do
       before do
-        service_pack_url =
-          "https://github.com/gocardless/bump.git/info/refs"\
-          "?service=git-upload-pack"
+        url = "https://github.com/gocardless/bump.git"
+        service_pack_url = "#{url}/info/refs?service=git-upload-pack"
+
         stub_request(:get, service_pack_url).
           to_return(
             status: 403,
-            body: "Account `gocardless' is disabled. Please ask the owner to "\
+            body: "Account `gocardless' is disabled. Please ask the owner to " \
                   "check their account."
           )
+
+        exit_status = double(success?: false)
+        allow(Open3).to receive(:capture3).and_call_original
+        allow(Open3).to receive(:capture3).with(anything, "git ls-remote #{url}").and_return(["", "", exit_status])
       end
 
       it "raises a helpful error" do
@@ -458,7 +470,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
 
       context "but a PR to this branch doesn't" do
         before do
-          url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}"\
+          url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}" \
                 "&state=all"
           stub_request(:get, url).
             to_return(status: 200, body: "[]", headers: json_header)
@@ -490,7 +502,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
 
       context "and a PR to this branch already exists" do
         before do
-          url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}"\
+          url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}" \
                 "&state=all"
           stub_request(:get, url).
             to_return(status: 200, body: "[{}]", headers: json_header)
@@ -503,7 +515,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
 
         context "but isn't initially returned (a race)" do
           before do
-            url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}"\
+            url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}" \
                   "&state=all"
             stub_request(:get, url).
               to_return(status: 200, body: "[]", headers: json_header)
@@ -531,7 +543,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
 
         context "but is merged" do
           before do
-            url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}"\
+            url = "#{repo_api_url}/pulls?head=gocardless:#{branch_name}" \
                   "&state=all"
             stub_request(:get, url).to_return(
               status: 200,
@@ -653,12 +665,12 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
         let(:signature_key) { fixture("keys", "pgp.key") }
         let(:public_key) { fixture("keys", "pgp.pub") }
         let(:text_to_sign) do
-          "tree cd8274d15fa3ae2ab983129fb037999f264ba9a7\n"\
-          "parent basecommitsha\n"\
-          "author dependabot <support@dependabot.com> 978307200 +0000\n"\
-          "committer dependabot <support@dependabot.com> 978307200 +0000\n"\
-          "\n"\
-          "Commit msg"
+          "tree cd8274d15fa3ae2ab983129fb037999f264ba9a7\n" \
+            "parent basecommitsha\n" \
+            "author dependabot <support@dependabot.com> 978307200 +0000\n" \
+            "committer dependabot <support@dependabot.com> 978307200 +0000\n" \
+            "\n" \
+            "Commit msg"
         end
         before { allow(Time).to receive(:now).and_return(Time.new(2001, 1, 1)) }
 
@@ -930,16 +942,16 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
           stub_request(:post, "#{repo_api_url}/issues/1347/comments")
         end
         let(:expected_comment_body) do
-          "Dependabot tried to add `@greysteil` as a reviewer to this PR, "\
-          "but received the following error from GitHub:\n\n"\
-          "```\n"\
-          "POST https://api.github.com/repos/gocardless/bump/pulls"\
-          "/1347/requested_reviewers: 422 - Reviews may only be requested "\
-          "from collaborators. One or more of the users or teams you "\
-          "specified is not a collaborator of the example/repo repository. "\
-          "// See: https://developer.github.com/v3/pulls/review_requests/"\
-          "#create-a-review-request\n"\
-          "```"
+          "Dependabot tried to add `@greysteil` as a reviewer to this PR, " \
+            "but received the following error from GitHub:\n\n" \
+            "```\n" \
+            "POST https://api.github.com/repos/gocardless/bump/pulls" \
+            "/1347/requested_reviewers: 422 - Reviews may only be requested " \
+            "from collaborators. One or more of the users or teams you " \
+            "specified is not a collaborator of the example/repo repository. " \
+            "// See: https://developer.github.com/v3/pulls/review_requests/" \
+            "#create-a-review-request\n" \
+            "```"
         end
 
         it "comments on the PR with details of the failure" do
@@ -1032,7 +1044,7 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
         end
 
         it "raises helpful error" do
-          msg = "POST https://api.github.com/repos/gocardless/bump/issues/"\
+          msg = "POST https://api.github.com/repos/gocardless/bump/issues/" \
                 "1347/labels: 500 - "
           expect { creator.create }.to raise_error(
             (an_instance_of(Dependabot::PullRequestCreator::AnnotationError).
@@ -1052,14 +1064,14 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
         before do
           stub_request(:post, "#{repo_api_url}/issues/1347/labels").
             to_return(status: 403,
-                      body: '{"error":"Account `gocardless\' is disabled. '\
+                      body: '{"error":"Account `gocardless\' is disabled. ' \
                             'Please ask the owner to check their account."}',
                       headers: json_header)
         end
 
         it "raises helpful error" do
-          msg = "POST https://api.github.com/repos/gocardless/bump/issues/"\
-                "1347/labels: 403 - Error: Account `gocardless' is disabled. "\
+          msg = "POST https://api.github.com/repos/gocardless/bump/issues/" \
+                "1347/labels: 403 - Error: Account `gocardless' is disabled. " \
                 "Please ask the owner to check their account."
           expect { creator.create }.to raise_error(
             (an_instance_of(Dependabot::PullRequestCreator::AnnotationError).
@@ -1074,6 +1086,25 @@ RSpec.describe Dependabot::PullRequestCreator::Github do
               )
             )
           )
+        end
+      end
+
+      context "the PR description is too long" do
+        let(:pr_description) { "a" * (described_class::MAX_PR_DESCRIPTION_LENGTH + 1) }
+
+        it "truncates the description" do
+          creator.create
+
+          expect(WebMock).
+            to have_requested(:post, "#{repo_api_url}/pulls").
+            with(
+              body: {
+                base: "master",
+                head: "dependabot/bundler/business-1.5.0",
+                title: "PR name",
+                body: ->(body) { expect(body.length).to be <= described_class::MAX_PR_DESCRIPTION_LENGTH }
+              }
+            )
         end
       end
     end

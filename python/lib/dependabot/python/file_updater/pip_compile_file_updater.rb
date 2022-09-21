@@ -22,6 +22,7 @@ module Dependabot
         require_relative "setup_file_sanitizer"
 
         UNSAFE_PACKAGES = %w(setuptools distribute pip).freeze
+        INCOMPATIBLE_VERSIONS_REGEX = /There are incompatible versions in the resolved dependencies:.*\z/m.freeze
         WARNINGS = /\s*# WARNING:.*\Z/m.freeze
         UNSAFE_NOTE =
           /\s*# The following packages are considered to be unsafe.*\Z/m.freeze
@@ -70,20 +71,20 @@ module Dependabot
             filenames_to_compile.each do |filename|
               # Shell out to pip-compile, generate a new set of requirements.
               # This is slow, as pip-compile needs to do installs.
-              name_part = "pyenv exec pip-compile "\
-                          "#{pip_compile_options(filename)} -P "\
+              name_part = "pyenv exec pip-compile " \
+                          "#{pip_compile_options(filename)} -P " \
                           "#{dependency.name}"
               version_part = "#{dependency.version} #{filename}"
               # Don't escape pyenv `dep-name==version` syntax
               run_pip_compile_command(
-                "#{SharedHelpers.escape_command(name_part)}=="\
+                "#{SharedHelpers.escape_command(name_part)}==" \
                 "#{SharedHelpers.escape_command(version_part)}",
                 allow_unsafe_shell_command: true
               )
               # Run pip-compile a second time, without an update argument, to
               # ensure it resets the right comments.
               run_pip_compile_command(
-                "pyenv exec pip-compile #{pip_compile_options(filename)} "\
+                "pyenv exec pip-compile #{pip_compile_options(filename)} " \
                 "#{filename}"
               )
             end
@@ -91,7 +92,7 @@ module Dependabot
             # Remove any .python-version file before parsing the reqs
             FileUtils.remove_entry(".python-version", true)
 
-            dependency_files.map do |file|
+            dependency_files.filter_map do |file|
               next unless file.name.end_with?(".txt")
 
               updated_content = File.read(file.name)
@@ -101,12 +102,12 @@ module Dependabot
               next if updated_content == file.content
 
               file.dup.tap { |f| f.content = updated_content }
-            end.compact
+            end
           end
         end
 
         def update_manifest_files
-          dependency_files.map do |file|
+          dependency_files.filter_map do |file|
             next unless file.name.end_with?(".in")
 
             file = file.dup
@@ -115,7 +116,7 @@ module Dependabot
 
             file.content = updated_content
             file
-          end.compact
+          end
         end
 
         def update_uncompiled_files(updated_files)
@@ -131,7 +132,7 @@ module Dependabot
                   reject { |file| updated_filenames.include?(file.name) }
 
           args = dependency.to_h
-          args = Hash[args.keys.map { |k| [k.to_sym, args[k]] }]
+          args = args.keys.to_h { |k| [k.to_sym, args[k]] }
           args[:requirements] = new_reqs
           args[:previous_requirements] = old_reqs
 
@@ -154,12 +155,20 @@ module Dependabot
 
           return stdout if process.success?
 
+          handle_pip_errors(stdout, command, time_taken, process.to_s)
+        end
+
+        def handle_pip_errors(stdout, command, time_taken, exit_value)
+          if stdout.match?(INCOMPATIBLE_VERSIONS_REGEX)
+            raise DependencyFileNotResolvable, stdout.match(INCOMPATIBLE_VERSIONS_REGEX)
+          end
+
           raise SharedHelpers::HelperSubprocessFailed.new(
             message: stdout,
             error_context: {
               command: command,
               time_taken: time_taken,
-              process_exit_value: process.to_s
+              process_exit_value: exit_value
             }
           )
         end
@@ -170,24 +179,6 @@ module Dependabot
             command,
             allow_unsafe_shell_command: allow_unsafe_shell_command
           )
-        rescue SharedHelpers::HelperSubprocessFailed => e
-          original_error ||= e
-          msg = e.message
-
-          relevant_error =
-            if error_suggests_bad_python_version?(msg) then original_error
-            else e
-            end
-
-          raise relevant_error unless error_suggests_bad_python_version?(msg)
-          raise relevant_error if user_specified_python_version
-          raise relevant_error if python_version == "2.7.18"
-
-          @python_version = "2.7.18"
-          retry
-        ensure
-          @python_version = nil
-          FileUtils.remove_entry(".python-version", true)
         end
 
         def python_env
@@ -203,14 +194,6 @@ module Dependabot
           end
 
           env
-        end
-
-        def error_suggests_bad_python_version?(message)
-          return true if message.include?("UnsupportedPythonVersion")
-          return true if message.include?("not find a version that satisfies")
-
-          message.include?('Command "python setup.py egg_info" failed') ||
-            message.include?("exit status 1: python setup.py egg_info")
         end
 
         def write_updated_dependency_files
@@ -240,7 +223,8 @@ module Dependabot
           return if run_command("pyenv versions").include?("#{python_version}\n")
 
           run_command("pyenv install -s #{python_version}")
-          run_command("pyenv exec pip install -r "\
+          run_command("pyenv exec pip install --upgrade pip")
+          run_command("pyenv exec pip install -r " \
                       "#{NativeHelpers.python_requirements_path}")
         end
 
@@ -368,7 +352,7 @@ module Dependabot
         end
 
         def deps_to_augment_hashes_for(updated_content, original_content)
-          regex = /^#{RequirementParser::INSTALL_REQ_WITH_REQUIREMENT}/
+          regex = /^#{RequirementParser::INSTALL_REQ_WITH_REQUIREMENT}/o
 
           new_matches = []
           updated_content.scan(regex) { new_matches << Regexp.last_match }
@@ -436,7 +420,7 @@ module Dependabot
         def pip_compile_options_from_compiled_file(requirements_file)
           options = ["--output-file=#{requirements_file.name}"]
 
-          options << "--no-index" unless requirements_file.content.include?("index-url http")
+          options << "--no-emit-index-url" unless requirements_file.content.include?("index-url http")
 
           options << "--generate-hashes" if requirements_file.content.include?("--hash=sha")
 
@@ -447,6 +431,9 @@ module Dependabot
           options << "--no-header" unless requirements_file.content.include?("autogenerated by pip-c")
 
           options << "--pre" if requirements_file.content.include?("--pre")
+
+          options << "--strip-extras" if requirements_file.content.include?("--strip-extras")
+
           options
         end
 

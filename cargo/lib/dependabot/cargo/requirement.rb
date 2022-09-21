@@ -33,7 +33,7 @@ module Dependabot
         [matches[1] || "=", Cargo::Version.new(matches[2])]
       end
 
-      # For consistency with other langauges, we define a requirements array.
+      # For consistency with other languages, we define a requirements array.
       # Rust doesn't have an `OR` separator for requirements, so it always
       # contains a single element.
       def self.requirements_array(requirement_string)
@@ -58,7 +58,8 @@ module Dependabot
         elsif req_string.match?(/^~[^>]/) then convert_tilde_req(req_string)
         elsif req_string.match?(/^[\d^]/) then convert_caret_req(req_string)
         elsif req_string.match?(/[<=>]/) then req_string
-        else ruby_range(req_string)
+        else
+          ruby_range(req_string)
         end
       end
 
@@ -92,7 +93,8 @@ module Dependabot
         upper_bound = parts.map.with_index do |part, i|
           if i < first_non_zero_index then part
           elsif i == first_non_zero_index then (part.to_i + 1).to_s
-          else 0
+          else
+            0
           end
         end.join(".")
 

@@ -40,10 +40,10 @@ RSpec.describe Functions::DependencySource do
 
     it "returns all versions from the private source" do
       is_expected.to eq([
-                          Gem::Version.new("1.5.0"),
-                          Gem::Version.new("1.9.0"),
-                          Gem::Version.new("1.10.0.beta")
-                        ])
+        Gem::Version.new("1.5.0"),
+        Gem::Version.new("1.9.0"),
+        Gem::Version.new("1.10.0.beta")
+      ])
     end
 
     context "specified as the default source" do
@@ -51,10 +51,10 @@ RSpec.describe Functions::DependencySource do
 
       it "returns all versions from the private source" do
         is_expected.to eq([
-                            Gem::Version.new("1.5.0"),
-                            Gem::Version.new("1.9.0"),
-                            Gem::Version.new("1.10.0.beta")
-                          ])
+          Gem::Version.new("1.5.0"),
+          Gem::Version.new("1.9.0"),
+          Gem::Version.new("1.10.0.beta")
+        ])
       end
     end
 
@@ -113,6 +113,9 @@ RSpec.describe Functions::DependencySource do
           with(basic_auth: ["SECRET_CODES", ""]).
           to_return(status: 400)
         stub_request(:get, registry_url + "specs.4.8.gz").
+          with(basic_auth: ["SECRET_CODES", ""]).
+          to_return(status: 400)
+        stub_request(:get, registry_url + "info/business").
           with(basic_auth: ["SECRET_CODES", ""]).
           to_return(status: 400)
       end

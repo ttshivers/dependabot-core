@@ -41,9 +41,7 @@ module Bundler
         $LOAD_PATH.shift until $LOAD_PATH.empty?
         reduced_load_paths.each { |p| $LOAD_PATH << p }
 
-        if destination.relative?
-          destination = destination.expand_path(Bundler.root)
-        end
+        destination = destination.expand_path(Bundler.root) if destination.relative?
         Dir["#{destination}/#{@glob}"].each do |spec_path|
           # Evaluate gemspecs and cache the result. Gemspecs
           # in git might require git or other dependencies.
@@ -53,7 +51,7 @@ module Bundler
 
           Bundler.rubygems.set_installed_by_version(spec)
           Bundler.rubygems.validate(spec)
-          File.open(spec_path, "wb") { |file| file.write(spec.to_ruby) }
+          File.binwrite(spec_path, spec.to_ruby)
         end
         $LOAD_PATH.shift until $LOAD_PATH.empty?
         original_load_paths.each { |p| $LOAD_PATH << p }

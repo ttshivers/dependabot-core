@@ -2,6 +2,7 @@
 
 require "nokogiri"
 require "dependabot/shared_helpers"
+require "dependabot/update_checkers/version_filters"
 require "dependabot/gradle/file_parser/repositories_finder"
 require "dependabot/gradle/update_checker"
 require "dependabot/gradle/version"
@@ -12,10 +13,8 @@ module Dependabot
   module Gradle
     class UpdateChecker
       class VersionFinder
-        GOOGLE_MAVEN_REPO = "https://maven.google.com"
-        GRADLE_PLUGINS_REPO = "https://plugins.gradle.org/m2"
         KOTLIN_PLUGIN_REPO_PREFIX = "org.jetbrains.kotlin"
-        TYPE_SUFFICES = %w(jre android java).freeze
+        TYPE_SUFFICES = %w(jre android java native_mt agp).freeze
 
         def initialize(dependency:, dependency_files:, credentials:,
                        ignored_versions:, raise_on_ignored: false,
@@ -46,7 +45,8 @@ module Dependabot
           possible_versions = filter_prereleases(possible_versions)
           possible_versions = filter_date_based_versions(possible_versions)
           possible_versions = filter_version_types(possible_versions)
-          possible_versions = filter_vulnerable_versions(possible_versions)
+          possible_versions = Dependabot::UpdateCheckers::VersionFilters.filter_vulnerable_versions(possible_versions,
+                                                                                                    security_advisories)
           possible_versions = filter_ignored_versions(possible_versions)
           possible_versions = filter_lower_versions(possible_versions)
 
@@ -57,7 +57,7 @@ module Dependabot
           version_details =
             repositories.map do |repository_details|
               url = repository_details.fetch("url")
-              next google_version_details if url == GOOGLE_MAVEN_REPO
+              next google_version_details if url == Gradle::FileParser::RepositoriesFinder::GOOGLE_MAVEN_REPO
 
               dependency_metadata(repository_details).css("versions > version").
                 select { |node| version_class.correct?(node.content) }.
@@ -111,18 +111,6 @@ module Dependabot
           filtered
         end
 
-        def filter_vulnerable_versions(possible_versions)
-          versions_array = possible_versions
-
-          security_advisories.each do |advisory|
-            versions_array =
-              versions_array.
-              reject { |v| advisory.vulnerable?(v.fetch(:version)) }
-          end
-
-          versions_array
-        end
-
         def filter_lower_versions(possible_versions)
           return possible_versions unless dependency.version && version_class.correct?(dependency.version)
 
@@ -146,20 +134,16 @@ module Dependabot
         end
 
         def google_version_details
-          url = GOOGLE_MAVEN_REPO
+          url = Gradle::FileParser::RepositoriesFinder::GOOGLE_MAVEN_REPO
           group_id, artifact_id = group_and_artifact_ids
 
-          dependency_metadata_url = "#{GOOGLE_MAVEN_REPO}/"\
-                                    "#{group_id.tr('.', '/')}/"\
+          dependency_metadata_url = "#{Gradle::FileParser::RepositoriesFinder::GOOGLE_MAVEN_REPO}/" \
+                                    "#{group_id.tr('.', '/')}/" \
                                     "group-index.xml"
 
           @google_version_details ||=
             begin
-              response = Excon.get(
-                dependency_metadata_url,
-                idempotent: true,
-                **SharedHelpers.excon_defaults
-              )
+              response = Dependabot::RegistryClient.get(url: dependency_metadata_url)
               Nokogiri::XML(response.body)
             end
 
@@ -180,10 +164,9 @@ module Dependabot
           @dependency_metadata ||= {}
           @dependency_metadata[repository_details.hash] ||=
             begin
-              response = Excon.get(
-                dependency_metadata_url(repository_details.fetch("url")),
-                idempotent: true,
-                **Dependabot::SharedHelpers.excon_defaults(headers: repository_details.fetch("auth_headers"))
+              response = Dependabot::RegistryClient.get(
+                url: dependency_metadata_url(repository_details.fetch("url")),
+                headers: repository_details.fetch("auth_headers")
               )
               check_response(response, repository_details.fetch("url"))
               Nokogiri::XML(response.body)
@@ -202,7 +185,7 @@ module Dependabot
         end
 
         def check_response(response, repository_url)
-          return unless [401, 403].include?(response.status)
+          return unless response.status == 401 || response.status == 403
           return if @forbidden_urls.include?(repository_url)
           return if central_repo_urls.include?(repository_url)
 
@@ -260,7 +243,7 @@ module Dependabot
 
         def plugin_repository_details
           [{
-            "url" => GRADLE_PLUGINS_REPO,
+            "url" => Gradle::FileParser::RepositoriesFinder::GRADLE_PLUGINS_REPO,
             "auth_headers" => {}
           }] + dependency_repository_details
         end
@@ -268,16 +251,18 @@ module Dependabot
         def matches_dependency_version_type?(comparison_version)
           return true unless dependency.version
 
-          current_type = dependency.version.split(/[.\-]/).
+          current_type = dependency.version.
+                         gsub("native-mt", "native_mt").
+                         split(/[.\-]/).
                          find do |type|
-                           TYPE_SUFFICES.
-                             find { |s| type.include?(s) }
+                           TYPE_SUFFICES.find { |s| type.include?(s) }
                          end
 
-          version_type = comparison_version.to_s.split(/[.\-]/).
+          version_type = comparison_version.to_s.
+                         gsub("native-mt", "native_mt").
+                         split(/[.\-]/).
                          find do |type|
-                           TYPE_SUFFICES.
-                             find { |s| type.include?(s) }
+                           TYPE_SUFFICES.find { |s| type.include?(s) }
                          end
 
           current_type == version_type
@@ -292,10 +277,10 @@ module Dependabot
           group_id, artifact_id = group_and_artifact_ids
           group_id = "#{KOTLIN_PLUGIN_REPO_PREFIX}.#{group_id}" if kotlin_plugin?
 
-          "#{repository_url}/"\
-          "#{group_id.tr('.', '/')}/"\
-          "#{artifact_id}/"\
-          "maven-metadata.xml"
+          "#{repository_url}/" \
+            "#{group_id.tr('.', '/')}/" \
+            "#{artifact_id}/" \
+            "maven-metadata.xml"
         end
 
         def group_and_artifact_ids

@@ -41,6 +41,12 @@ RSpec.describe Dependabot::NpmAndYarn::MetadataFinder do
         to_return(status: 200, body: npm_latest_version_response)
       stub_request(:get, npm_url).
         to_return(status: 200, body: npm_all_versions_response)
+      stub_request(:get, "https://example.come/status").to_return(
+        status: 200,
+        body: "Not GHES",
+        headers: {}
+      )
+      stub_request(:get, "https://jshttp/status").to_return(status: 404)
     end
 
     context "for a git dependency" do
@@ -448,8 +454,8 @@ RSpec.describe Dependabot::NpmAndYarn::MetadataFinder do
 
       it "gives details of the new releaser" do
         expect(maintainer_changes).to eq(
-          "This version was pushed to npm by "\
-          "[dougwilson](https://www.npmjs.com/~dougwilson), a new releaser "\
+          "This version was pushed to npm by " \
+          "[dougwilson](https://www.npmjs.com/~dougwilson), a new releaser " \
           "for etag since your current version."
         )
       end

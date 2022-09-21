@@ -15,9 +15,13 @@ Dependabot::PullRequestCreator::Labeler.
   register_label_details(
     "github_actions",
     name: "github_actions",
+    description: "Pull requests that update GitHub Actions code",
     colour: "000000"
   )
 
 require "dependabot/dependency"
 Dependabot::Dependency.
   register_production_check("github_actions", ->(_) { true })
+
+require "dependabot/utils"
+Dependabot::Utils.register_always_clone("github_actions")

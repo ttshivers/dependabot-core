@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 require "excon"
+require "uri"
 
 require "dependabot/bundler/update_checker"
 require "dependabot/bundler/native_helpers"
 require "dependabot/bundler/helpers"
+require "dependabot/registry_client"
 require "dependabot/shared_helpers"
 require "dependabot/errors"
 
@@ -143,7 +145,10 @@ module Dependabot
             regex = BundlerErrorPatterns::HTTP_ERR_REGEX
             if error.message.match?(regex)
               source = error.message.match(regex)[:source]
-              raise if source.end_with?("rubygems.org/")
+              raise if [
+                "rubygems.org",
+                "www.rubygems.org"
+              ].include?(URI(source).host)
 
               raise Dependabot::PrivateSourceTimedOut, source
             end
@@ -167,6 +172,7 @@ module Dependabot
             git_specs = NativeHelpers.run_bundler_subprocess(
               bundler_version: bundler_version,
               function: "git_specs",
+              options: options,
               args: {
                 dir: tmp_dir,
                 gemfile_name: gemfile.name,
@@ -174,10 +180,11 @@ module Dependabot
               }
             )
             git_specs.reject do |spec|
-              Excon.get(
-                spec.fetch("auth_uri"),
-                idempotent: true,
-                **SharedHelpers.excon_defaults
+              uri = URI.parse(spec.fetch("auth_uri"))
+              next false unless uri.scheme&.match?(/https?/o)
+
+              Dependabot::RegistryClient.get(
+                url: uri.to_s
               ).status == 200
             rescue Excon::Error::Socket, Excon::Error::Timeout
               false
@@ -192,6 +199,7 @@ module Dependabot
             NativeHelpers.run_bundler_subprocess(
               bundler_version: bundler_version,
               function: "jfrog_source",
+              options: options,
               args: {
                 dir: dir,
                 gemfile_name: gemfile.name,
@@ -208,7 +216,7 @@ module Dependabot
             File.write(path, file.content)
           end
 
-          File.write(lockfile.name, sanitized_lockfile_body) if lockfile
+          File.write(lockfile.name, lockfile.content) if lockfile
         end
 
         def private_registry_credentials
@@ -224,12 +232,6 @@ module Dependabot
         def lockfile
           dependency_files.find { |f| f.name == "Gemfile.lock" } ||
             dependency_files.find { |f| f.name == "gems.locked" }
-        end
-
-        # TODO: Stop sanitizing the lockfile once we have bundler 2 installed
-        def sanitized_lockfile_body
-          re = FileUpdater::LockfileUpdater::LOCKFILE_ENDING
-          lockfile.content.gsub(re, "")
         end
       end
     end

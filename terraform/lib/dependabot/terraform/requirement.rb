@@ -7,6 +7,13 @@ require "dependabot/terraform/version"
 module Dependabot
   module Terraform
     class Requirement < Gem::Requirement
+      # Override regex PATTERN from Gem::Requirement to add support for the
+      # optional 'v' prefix to release tag names, which Terraform supports.
+      # https://www.terraform.io/docs/registry/modules/publish.html#requirements
+      OPERATORS = OPS.keys.map { |key| Regexp.quote(key) }.join("|").freeze
+      PATTERN_RAW = "\\s*(#{OPERATORS})?\\s*v?(#{Gem::Version::VERSION_PATTERN})\\s*"
+      PATTERN = /\A#{PATTERN_RAW}\z/.freeze
+
       def self.parse(obj)
         return ["=", Version.new(obj.to_s)] if obj.is_a?(Gem::Version)
 
@@ -20,7 +27,7 @@ module Dependabot
         [matches[1] || "=", Terraform::Version.new(matches[2])]
       end
 
-      # For consistency with other langauges, we define a requirements array.
+      # For consistency with other languages, we define a requirements array.
       # Terraform doesn't have an `OR` separator for requirements, so it
       # always contains a single element.
       def self.requirements_array(requirement_string)

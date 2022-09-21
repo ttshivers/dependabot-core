@@ -63,7 +63,7 @@ module Dependabot
         def updating_from_git_to_npm?
           return false unless updated_source.nil?
 
-          original_source = requirements.map { |r| r[:source] }.compact.first
+          original_source = requirements.filter_map { |r| r[:source] }.first
           original_source&.fetch(:type) == "git"
         end
 
@@ -178,7 +178,8 @@ module Dependabot
               version_to_be_permitted.segments[index]
             elsif index == index_to_update
               version_to_be_permitted.segments[index] + 1
-            else 0
+            else
+              0
             end
           end.join(".")
         end

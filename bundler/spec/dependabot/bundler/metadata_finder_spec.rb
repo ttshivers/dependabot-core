@@ -33,6 +33,20 @@ RSpec.describe Dependabot::Bundler::MetadataFinder do
   end
   let(:dependency_name) { "business" }
 
+  before do
+    stub_request(:get, "https://example.com/status").to_return(
+      status: 200,
+      body: "Not GHES",
+      headers: {}
+    )
+
+    stub_request(:get, "https://www.rubydoc.info/status").to_return(
+      status: 200,
+      body: "Not GHES",
+      headers: {}
+    )
+  end
+
   describe "#source_url" do
     subject(:source_url) { finder.source_url }
 
@@ -382,7 +396,7 @@ RSpec.describe Dependabot::Bundler::MetadataFinder do
 
         it "gets the URL from the changelog_uri" do
           expect(suggested_changelog_url).to eq(
-            "https://github.com/rails/rails/blob/v5.2.2/"\
+            "https://github.com/rails/rails/blob/v5.2.2/" \
             "activerecord/CHANGELOG.md"
           )
         end

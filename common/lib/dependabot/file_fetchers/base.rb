@@ -15,7 +15,7 @@ require "dependabot/shared_helpers"
 module Dependabot
   module FileFetchers
     class Base
-      attr_reader :source, :credentials, :repo_contents_path
+      attr_reader :source, :credentials, :repo_contents_path, :options
 
       CLIENT_NOT_FOUND_ERRORS = [
         Octokit::NotFound,
@@ -42,11 +42,14 @@ module Dependabot
       # If provided, file _data_ will be loaded from the clone.
       # Submodules and directory listings are _not_ currently supported
       # by repo_contents_path and still use an API trip.
-      def initialize(source:, credentials:, repo_contents_path: nil)
+      #
+      # options supports custom feature enablement
+      def initialize(source:, credentials:, repo_contents_path: nil, options: {})
         @source = source
         @credentials = credentials
         @repo_contents_path = repo_contents_path
         @linked_paths = {}
+        @options = options
       end
 
       def repo
@@ -138,7 +141,7 @@ module Dependabot
 
         path = Pathname.new(File.join(directory, filename)).cleanpath.to_path
         content = _fetch_file_content(path, fetch_submodules: fetch_submodules)
-        type = @linked_paths.key?(path.gsub(%r{^/}, "")) ? "symlink" : type
+        type = "symlink" if @linked_paths.key?(path.gsub(%r{^/}, ""))
 
         DependencyFile.new(
           name: Pathname.new(filename).cleanpath.to_path,
@@ -157,11 +160,12 @@ module Dependabot
         path = Pathname.new(File.join(dir)).cleanpath.to_path.gsub(%r{^/*}, "")
 
         @repo_contents ||= {}
-        @repo_contents[dir] ||= _fetch_repo_contents(
-          path,
-          raise_errors: raise_errors,
-          fetch_submodules: fetch_submodules
-        )
+        @repo_contents[dir] ||= if repo_contents_path
+                                  _cloned_repo_contents(path)
+                                else
+                                  _fetch_repo_contents(path, raise_errors: raise_errors,
+                                                             fetch_submodules: fetch_submodules)
+                                end
       end
 
       #################################################
@@ -223,6 +227,31 @@ module Dependabot
         end
 
         github_response.map { |f| _build_github_file_struct(f) }
+      end
+
+      def _cloned_repo_contents(relative_path)
+        repo_path = File.join(clone_repo_contents, relative_path)
+        return [] unless Dir.exist?(repo_path)
+
+        Dir.entries(repo_path).filter_map do |name|
+          next if name == "." || name == ".."
+
+          absolute_path = File.join(repo_path, name)
+          type = if File.symlink?(absolute_path)
+                   "symlink"
+                 elsif Dir.exist?(absolute_path)
+                   "dir"
+                 else
+                   "file"
+                 end
+
+          OpenStruct.new(
+            name: name,
+            path: Pathname.new(File.join(relative_path, name)).cleanpath.to_path,
+            type: type,
+            size: 0 # NOTE: added for parity with github contents API
+          )
+        end
       end
 
       def update_linked_paths(repo, path, commit, github_response)
@@ -330,8 +359,8 @@ module Dependabot
 
         response.files.map do |file|
           OpenStruct.new(
-            name: file.absolute_path,
-            path: file.absolute_path,
+            name: File.basename(file.relative_path),
+            path: file.relative_path,
             type: "file",
             size: 0 # file size would require new api call per file..
           )
@@ -420,7 +449,13 @@ module Dependabot
           )
         end
 
-        Base64.decode64(tmp.content).force_encoding("UTF-8").encode
+        if tmp.content == ""
+          # The file may have exceeded the 1MB limit
+          # see https://github.blog/changelog/2022-05-03-increased-file-size-limit-when-retrieving-file-contents-via-rest-api/
+          github_client.contents(repo, path: path, ref: commit, accept: "application/vnd.github.v3.raw")
+        else
+          Base64.decode64(tmp.content).force_encoding("UTF-8").encode
+        end
       rescue Octokit::Forbidden => e
         raise unless e.message.include?("too_large")
 

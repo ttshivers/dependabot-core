@@ -1,18 +1,19 @@
 # frozen_string_literal: true
 
 require "nokogiri"
-require "dependabot/shared_helpers"
+require "dependabot/update_checkers/version_filters"
 require "dependabot/maven/file_parser/repositories_finder"
 require "dependabot/maven/update_checker"
 require "dependabot/maven/version"
 require "dependabot/maven/requirement"
 require "dependabot/maven/utils/auth_headers_finder"
+require "dependabot/registry_client"
 
 module Dependabot
   module Maven
     class UpdateChecker
       class VersionFinder
-        TYPE_SUFFICES = %w(jre android java).freeze
+        TYPE_SUFFICES = %w(jre android java native_mt agp).freeze
 
         def initialize(dependency:, dependency_files:, credentials:,
                        ignored_versions:, security_advisories:,
@@ -24,6 +25,7 @@ module Dependabot
           @raise_on_ignored    = raise_on_ignored
           @security_advisories = security_advisories
           @forbidden_urls      = []
+          @dependency_metadata = {}
         end
 
         def latest_version_details
@@ -43,7 +45,8 @@ module Dependabot
           possible_versions = filter_prereleases(possible_versions)
           possible_versions = filter_date_based_versions(possible_versions)
           possible_versions = filter_version_types(possible_versions)
-          possible_versions = filter_vulnerable_versions(possible_versions)
+          possible_versions = Dependabot::UpdateCheckers::VersionFilters.filter_vulnerable_versions(possible_versions,
+                                                                                                    security_advisories)
           possible_versions = filter_ignored_versions(possible_versions)
           possible_versions = filter_lower_versions(possible_versions)
 
@@ -107,18 +110,6 @@ module Dependabot
           filtered
         end
 
-        def filter_vulnerable_versions(possible_versions)
-          versions_array = possible_versions
-
-          security_advisories.each do |advisory|
-            versions_array =
-              versions_array.
-              reject { |v| advisory.vulnerable?(v.fetch(:version)) }
-          end
-
-          versions_array
-        end
-
         def filter_lower_versions(possible_versions)
           return possible_versions unless dependency.version && version_class.correct?(dependency.version)
 
@@ -148,10 +139,9 @@ module Dependabot
           @released_check[version] =
             repositories.any? do |repository_details|
               url = repository_details.fetch("url")
-              response = Excon.head(
-                dependency_files_url(url, version),
-                idempotent: true,
-                **SharedHelpers.excon_defaults(headers: repository_details.fetch("auth_headers"))
+              response = Dependabot::RegistryClient.head(
+                url: dependency_files_url(url, version),
+                headers: repository_details.fetch("auth_headers")
               )
 
               response.status < 400
@@ -164,25 +154,27 @@ module Dependabot
         end
 
         def dependency_metadata(repository_details)
-          @dependency_metadata ||= {}
-          @dependency_metadata[repository_details.hash] ||=
-            begin
-              response = Excon.get(
-                dependency_metadata_url(repository_details.fetch("url")),
-                idempotent: true,
-                **Dependabot::SharedHelpers.excon_defaults(headers: repository_details.fetch("auth_headers"))
-              )
-              check_response(response, repository_details.fetch("url"))
+          repository_key = repository_details.hash
+          return @dependency_metadata[repository_key] if @dependency_metadata.key?(repository_key)
 
-              Nokogiri::XML(response.body)
-            rescue URI::InvalidURIError
-              Nokogiri::XML("")
-            rescue Excon::Error::Socket, Excon::Error::Timeout,
-                   Excon::Error::TooManyRedirects
-              raise if central_repo_urls.include?(repository_details["url"])
+          @dependency_metadata[repository_key] = fetch_dependency_metadata(repository_details)
+        end
 
-              Nokogiri::XML("")
-            end
+        def fetch_dependency_metadata(repository_details)
+          response = Dependabot::RegistryClient.get(
+            url: dependency_metadata_url(repository_details.fetch("url")),
+            headers: repository_details.fetch("auth_headers")
+          )
+          check_response(response, repository_details.fetch("url"))
+
+          Nokogiri::XML(response.body)
+        rescue URI::InvalidURIError
+          Nokogiri::XML("")
+        rescue Excon::Error::Socket, Excon::Error::Timeout,
+               Excon::Error::TooManyRedirects
+          raise if central_repo_urls.include?(repository_details["url"])
+
+          Nokogiri::XML("")
         end
 
         def check_response(response, repository_url)
@@ -194,7 +186,7 @@ module Dependabot
         end
 
         def repositories
-          return @repositories if @repositories
+          return @repositories if defined?(@repositories)
 
           details = pom_repository_details + credentials_repository_details
 
@@ -231,13 +223,19 @@ module Dependabot
         def matches_dependency_version_type?(comparison_version)
           return true unless dependency.version
 
-          current_type =
-            TYPE_SUFFICES.
-            find { |t| dependency.version.split(/[.\-]/).include?(t) }
+          current_type = dependency.version.
+                         gsub("native-mt", "native_mt").
+                         split(/[.\-]/).
+                         find do |type|
+                           TYPE_SUFFICES.find { |s| type.include?(s) }
+                         end
 
-          version_type =
-            TYPE_SUFFICES.
-            find { |t| comparison_version.to_s.split(/[.\-]/).include?(t) }
+          version_type = comparison_version.to_s.
+                         gsub("native-mt", "native_mt").
+                         split(/[.\-]/).
+                         find do |type|
+                           TYPE_SUFFICES.find { |s| type.include?(s) }
+                         end
 
           current_type == version_type
         end
@@ -250,10 +248,10 @@ module Dependabot
         def dependency_metadata_url(repository_url)
           group_id, artifact_id, _classifier = dependency.name.split(":")
 
-          "#{repository_url}/"\
-          "#{group_id.tr('.', '/')}/"\
-          "#{artifact_id}/"\
-          "maven-metadata.xml"
+          "#{repository_url}/" \
+            "#{group_id.tr('.', '/')}/" \
+            "#{artifact_id}/" \
+            "maven-metadata.xml"
         end
 
         def dependency_files_url(repository_url, version)
@@ -262,11 +260,11 @@ module Dependabot
                  dig(:metadata, :packaging_type)
 
           actual_classifier = classifier.nil? ? "" : "-#{classifier}"
-          "#{repository_url}/"\
-          "#{group_id.tr('.', '/')}/"\
-          "#{artifact_id}/"\
-          "#{version}/"\
-          "#{artifact_id}-#{version}#{actual_classifier}.#{type}"
+          "#{repository_url}/" \
+            "#{group_id.tr('.', '/')}/" \
+            "#{artifact_id}/" \
+            "#{version}/" \
+            "#{artifact_id}-#{version}#{actual_classifier}.#{type}"
         end
 
         def version_class

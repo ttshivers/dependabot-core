@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "excon"
-require "pandoc-ruby"
 
 require "dependabot/clients/github_with_retries"
 require "dependabot/clients/gitlab_with_retries"
@@ -17,7 +16,7 @@ module Dependabot
 
         # Earlier entries are preferred
         CHANGELOG_NAMES = %w(
-          changelog news changes history release whatsnew
+          changelog news changes history release whatsnew releases
         ).freeze
 
         attr_reader :source, :dependency, :credentials, :suggested_changelog_url
@@ -37,31 +36,10 @@ module Dependabot
         def changelog_text
           return unless full_changelog_text
 
-          pruned_text = ChangelogPruner.new(
+          ChangelogPruner.new(
             dependency: dependency,
             changelog_text: full_changelog_text
           ).pruned_text
-
-          return pruned_text unless changelog.name.end_with?(".rst")
-
-          begin
-            PandocRuby.convert(
-              pruned_text,
-              from: :rst,
-              to: :markdown,
-              wrap: :none,
-              timeout: 10
-            )
-          rescue Errno::ENOENT => e
-            raise unless e.message == "No such file or directory - pandoc"
-
-            # If pandoc isn't installed just return the rst
-            pruned_text
-          rescue RuntimeError => e
-            raise unless e.message.include?("Pandoc timed out")
-
-            pruned_text
-          end
         end
 
         def upgrade_guide_url
@@ -189,6 +167,7 @@ module Dependabot
               when "github" then fetch_github_file(file)
               when "gitlab" then fetch_gitlab_file(file)
               when "bitbucket" then fetch_bitbucket_file(file)
+              when "codecommit" then nil # TODO: git file from codecommit
               else raise "Unsupported provider '#{provider}'"
               end
           end
@@ -242,6 +221,7 @@ module Dependabot
           when "bitbucket" then fetch_bitbucket_file_list
           when "gitlab" then fetch_gitlab_file_list
           when "azure" then [] # TODO: Fetch files from Azure
+          when "codecommit" then [] # TODO: Fetch Files from Codecommit
           else raise "Unexpected repo provider '#{source.provider}'"
           end
         end
@@ -259,7 +239,7 @@ module Dependabot
           files += github_client.contents(source.repo, opts)
 
           files.uniq.each do |f|
-            next unless %w(doc docs).include?(f.name) && f.type == "dir"
+            next unless f.type == "dir" && f.name.match?(/docs?/o)
 
             opts = { path: f.path, ref: ref }.compact
             files += github_client.contents(source.repo, opts)
@@ -293,6 +273,7 @@ module Dependabot
         end
 
         def fetch_gitlab_file_list
+          branch = default_gitlab_branch
           gitlab_client.repo_tree(source.repo).map do |file|
             type = case file.type
                    when "blob" then "file"
@@ -303,8 +284,8 @@ module Dependabot
               name: file.name,
               type: type,
               size: 100, # GitLab doesn't return file size
-              html_url: "#{source.url}/blob/master/#{file.path}",
-              download_url: "#{source.url}/raw/master/#{file.path}"
+              html_url: "#{source.url}/blob/#{branch}/#{file.path}",
+              download_url: "#{source.url}/raw/#{branch}/#{file.path}"
             )
           end
         rescue Gitlab::Error::NotFound
@@ -319,16 +300,16 @@ module Dependabot
         end
 
         def previous_ref
-          previous_refs = dependency.previous_requirements.map do |r|
+          previous_refs = dependency.previous_requirements.filter_map do |r|
             r.dig(:source, "ref") || r.dig(:source, :ref)
-          end.compact.uniq
+          end.uniq
           return previous_refs.first if previous_refs.count == 1
         end
 
         def new_ref
-          new_refs = dependency.requirements.map do |r|
+          new_refs = dependency.requirements.filter_map do |r|
             r.dig(:source, "ref") || r.dig(:source, :ref)
-          end.compact.uniq
+          end.uniq
           return new_refs.first if new_refs.count == 1
         end
 
@@ -376,6 +357,11 @@ module Dependabot
         def default_bitbucket_branch
           @default_bitbucket_branch ||=
             bitbucket_client.fetch_default_branch(source.repo)
+        end
+
+        def default_gitlab_branch
+          @default_gitlab_branch ||=
+            gitlab_client.fetch_default_branch(source.repo)
         end
       end
     end

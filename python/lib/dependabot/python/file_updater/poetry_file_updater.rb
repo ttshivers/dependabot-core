@@ -105,7 +105,6 @@ module Dependabot
               content = sanitize(content)
               content = freeze_other_dependencies(content)
               content = freeze_dependencies_being_updated(content)
-              content = add_private_sources(content)
               content
             end
         end
@@ -132,7 +131,7 @@ module Dependabot
         end
 
         def lock_declaration_to_new_version!(poetry_object, dep)
-          %w(dependencies dev-dependencies).each do |type|
+          Dependabot::Python::FileParser::PoetryFilesParser::POETRY_DEPENDENCY_TYPES.each do |type|
             names = poetry_object[type]&.keys || []
             pkg_name = names.find { |nm| normalise(nm) == dep.name }
             next unless pkg_name
@@ -148,12 +147,6 @@ module Dependabot
         def create_declaration_at_new_version!(poetry_object, dep)
           poetry_object[subdep_type] ||= {}
           poetry_object[subdep_type][dependency.name] = dep.version
-        end
-
-        def add_private_sources(pyproject_content)
-          PyprojectPreparer.
-            new(pyproject_content: pyproject_content).
-            replace_sources(credentials)
         end
 
         def subdep_type
@@ -175,11 +168,18 @@ module Dependabot
           SharedHelpers.in_a_temporary_directory do
             SharedHelpers.with_git_configured(credentials: credentials) do
               write_temporary_dependency_files(pyproject_content)
+              add_auth_env_vars
 
               if python_version && !pre_installed_python?(python_version)
                 run_poetry_command("pyenv install -s #{python_version}")
-                run_poetry_command("pyenv exec pip install -r"\
+                run_poetry_command("pyenv exec pip install --upgrade pip")
+                run_poetry_command("pyenv exec pip install -r" \
                                    "#{NativeHelpers.python_requirements_path}")
+              end
+
+              # use system git instead of the pure Python dulwich
+              unless python_version&.start_with?("3.6")
+                run_poetry_command("pyenv exec poetry config experimental.system-git-client true")
               end
 
               run_poetry_command(poetry_update_command)
@@ -231,6 +231,12 @@ module Dependabot
           File.write("pyproject.toml", pyproject_content)
         end
 
+        def add_auth_env_vars
+          Python::FileUpdater::PyprojectPreparer.
+            new(pyproject_content: pyproject.content).
+            add_auth_env_vars(credentials)
+        end
+
         def python_version
           requirements = python_requirement_parser.user_specified_requirements
           requirements = requirements.
@@ -257,7 +263,8 @@ module Dependabot
         def pyproject_hash_for(pyproject_content)
           SharedHelpers.in_a_temporary_directory do |dir|
             SharedHelpers.with_git_configured(credentials: credentials) do
-              File.write(File.join(dir, "pyproject.toml"), pyproject_content)
+              write_temporary_dependency_files(pyproject_content)
+
               SharedHelpers.run_helper_subprocess(
                 command: "pyenv exec python #{python_helper_path}",
                 function: "get_pyproject_hash",

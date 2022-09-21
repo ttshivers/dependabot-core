@@ -105,7 +105,9 @@ module Dependabot
           new_version_parts = version(dep).split(/[.+]/)
           old_version_parts = previous_version(dep)&.split(/[.+]/) || []
           all_parts = new_version_parts.first(3) + old_version_parts.first(3)
+          # rubocop:disable Performance/RedundantEqualityComparisonBlock
           next 0 unless all_parts.all? { |part| part.to_i.to_s == part }
+          # rubocop:enable Performance/RedundantEqualityComparisonBlock
           next 1 if new_version_parts[0] != old_version_parts[0]
           next 2 if new_version_parts[1] != old_version_parts[1]
 
@@ -269,7 +271,7 @@ module Dependabot
       end
 
       def fetch_azure_labels
-        langauge_name =
+        language_name =
           self.class.label_details_for_package_manager(package_manager).
           fetch(:name)
 
@@ -277,7 +279,7 @@ module Dependabot
           *@labels,
           DEFAULT_DEPENDENCIES_LABEL,
           DEFAULT_SECURITY_LABEL,
-          langauge_name
+          language_name
         ].uniq
       end
 
@@ -351,36 +353,37 @@ module Dependabot
       end
 
       def create_github_language_label
-        langauge_name =
-          self.class.label_details_for_package_manager(package_manager).
-          fetch(:name)
+        label = self.class.label_details_for_package_manager(package_manager)
+        language_name = label.fetch(:name)
         github_client_for_source.add_label(
           source.repo,
-          langauge_name,
-          self.class.label_details_for_package_manager(package_manager).
-            fetch(:colour),
-          description: "Pull requests that update #{langauge_name.capitalize} "\
-                       "code",
+          language_name,
+          label.fetch(:colour),
+          description: label.fetch(:description) { default_description_for(language_name) },
           accept: "application/vnd.github.symmetra-preview+json"
         )
-        @labels = [*@labels, langauge_name].uniq
+        @labels = [*@labels, language_name].uniq
       rescue Octokit::UnprocessableEntity => e
         raise unless e.errors.first.fetch(:code) == "already_exists"
 
-        @labels = [*@labels, langauge_name].uniq
+        @labels = [*@labels, language_name].uniq
+      end
+
+      def default_description_for(language)
+        "Pull requests that update #{language.capitalize} code"
       end
 
       def create_gitlab_language_label
-        langauge_name =
+        language_name =
           self.class.label_details_for_package_manager(package_manager).
           fetch(:name)
         gitlab_client_for_source.create_label(
           source.repo,
-          langauge_name,
+          language_name,
           "#" + self.class.label_details_for_package_manager(package_manager).
                 fetch(:colour)
         )
-        @labels = [*@labels, langauge_name].uniq
+        @labels = [*@labels, language_name].uniq
       end
 
       def github_client_for_source

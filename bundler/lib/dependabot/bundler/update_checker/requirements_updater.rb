@@ -28,7 +28,7 @@ module Dependabot
 
         def updated_requirements
           requirements.map do |req|
-            if req[:file].match?(/\.gemspec/)
+            if req[:file].include?(".gemspec")
               update_gemspec_requirement(req)
             else
               # If a requirement doesn't come from a gemspec, it must be from
@@ -101,7 +101,7 @@ module Dependabot
               when "!="
                 []
               else
-                raise "Unexpected operation for unsatisfied Gemfile "\
+                raise "Unexpected operation for unsatisfied Gemfile " \
                       "requirement: #{op}"
               end
             end
@@ -142,7 +142,8 @@ module Dependabot
               next r if requirement_satisfied?(r, req[:groups])
 
               if req[:groups] == ["development"] then bumped_requirements(r)
-              else widened_requirements(r)
+              else
+                widened_requirements(r)
               end
             end
 
@@ -267,7 +268,8 @@ module Dependabot
               version_to_be_permitted.segments[index] + 1
             elsif index > version_to_be_permitted.segments.count - 1
               nil
-            else 0
+            else
+              0
             end
           end.compact
 

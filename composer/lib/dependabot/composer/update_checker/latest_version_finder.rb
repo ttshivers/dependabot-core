@@ -4,6 +4,7 @@ require "excon"
 require "json"
 
 require "dependabot/composer/update_checker"
+require "dependabot/update_checkers/version_filters"
 require "dependabot/shared_helpers"
 require "dependabot/errors"
 
@@ -45,9 +46,11 @@ module Dependabot
         def fetch_lowest_security_fix_version
           versions = available_versions
           versions = filter_prerelease_versions(versions)
-          versions = filter_vulnerable_versions(versions)
+          versions = Dependabot::UpdateCheckers::VersionFilters.filter_vulnerable_versions(versions,
+                                                                                           security_advisories)
           versions = filter_ignored_versions(versions)
           versions = filter_lower_versions(versions)
+
           versions.min
         end
 
@@ -67,11 +70,6 @@ module Dependabot
           end
 
           filtered
-        end
-
-        def filter_vulnerable_versions(versions_array)
-          versions_array.
-            reject { |v| security_advisories.any? { |a| a.vulnerable?(v) } }
         end
 
         def filter_lower_versions(versions_array)
@@ -106,7 +104,7 @@ module Dependabot
 
           urls = repositories.
                  select { |h| h["type"] == "composer" }.
-                 map { |h| h["url"] }.compact.
+                 filter_map { |h| h["url"] }.
                  map { |url| url.gsub(%r{\/$}, "") + "/packages.json" }
 
           unless repositories.any? { |rep| rep["packagist.org"] == false }
@@ -123,12 +121,12 @@ module Dependabot
         def fetch_registry_versions_from_url(url)
           cred = registry_credentials.find { |c| url.include?(c["registry"]) }
 
-          response = Excon.get(
-            url,
-            idempotent: true,
-            user: cred&.fetch("username", nil),
-            password: cred&.fetch("password", nil),
-            **SharedHelpers.excon_defaults
+          response = Dependabot::RegistryClient.get(
+            url: url,
+            options: {
+              user: cred&.fetch("username", nil),
+              password: cred&.fetch("password", nil)
+            }
           )
 
           parse_registry_response(response, url)

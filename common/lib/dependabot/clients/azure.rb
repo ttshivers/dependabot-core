@@ -14,6 +14,12 @@ module Dependabot
 
       class BadGateway < StandardError; end
 
+      class Unauthorized < StandardError; end
+
+      class Forbidden < StandardError; end
+
+      class TagsCreationForbidden < StandardError; end
+
       RETRYABLE_ERRORS = [InternalServerError, BadGateway, ServiceNotAvailable].freeze
 
       MAX_PR_DESCRIPTION_LENGTH = 3999
@@ -228,26 +234,44 @@ module Dependabot
           raise ServiceNotAvailable if response.status == 503
         end
 
+        raise Unauthorized if response.status == 401
+        raise Forbidden if response.status == 403
         raise NotFound if response.status == 404
 
         response
       end
 
       def post(url, json)
-        response = Excon.post(
-          url,
-          body: json,
-          user: credentials&.fetch("username", nil),
-          password: credentials&.fetch("password", nil),
-          idempotent: true,
-          **SharedHelpers.excon_defaults(
-            headers: auth_header.merge(
-              {
-                "Content-Type" => "application/json"
-              }
+        response = nil
+
+        retry_connection_failures do
+          response = Excon.post(
+            url,
+            body: json,
+            user: credentials&.fetch("username", nil),
+            password: credentials&.fetch("password", nil),
+            idempotent: true,
+            **SharedHelpers.excon_defaults(
+              headers: auth_header.merge(
+                {
+                  "Content-Type" => "application/json"
+                }
+              )
             )
           )
-        )
+
+          raise InternalServerError if response.status == 500
+          raise BadGateway if response.status == 502
+          raise ServiceNotAvailable if response.status == 503
+        end
+
+        raise Unauthorized if response.status == 401
+
+        if response.status == 403
+          raise TagsCreationForbidden if tags_creation_forbidden?(response)
+
+          raise Forbidden
+        end
         raise NotFound if response.status == 404
 
         response
@@ -286,11 +310,18 @@ module Dependabot
         # https://developercommunity.visualstudio.com/content/problem/608770/remove-4000-character-limit-on-pull-request-descri.html
         pr_description = pr_description.dup.force_encoding(Encoding::UTF_16)
         if pr_description.length > MAX_PR_DESCRIPTION_LENGTH
-          truncated_msg = "...\n\n_Description has been truncated_".dup.force_encoding(Encoding::UTF_16)
+          truncated_msg = (+"...\n\n_Description has been truncated_").force_encoding(Encoding::UTF_16)
           truncate_length = MAX_PR_DESCRIPTION_LENGTH - truncated_msg.length
           pr_description = (pr_description[0..truncate_length] + truncated_msg)
         end
         pr_description.force_encoding(Encoding::UTF_8)
+      end
+
+      def tags_creation_forbidden?(response)
+        return if response.body.empty?
+
+        message = JSON.parse(response.body).fetch("message", nil)
+        message&.include?("TF401289")
       end
 
       attr_reader :auth_header

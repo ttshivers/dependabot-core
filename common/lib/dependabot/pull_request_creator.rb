@@ -23,7 +23,7 @@ module Dependabot
     #
     # If you wish to disable this behaviour when using Dependabot Core directly,
     # pass a nil value when initialising this class.
-    DEFAULT_GITHUB_REDIRECTION_SERVICE = "github-redirect.dependabot.com"
+    DEFAULT_GITHUB_REDIRECTION_SERVICE = "redirect.github.com"
 
     class RepoNotFound < StandardError; end
 
@@ -48,7 +48,7 @@ module Dependabot
                 :custom_labels, :author_details, :signature_key,
                 :commit_message_options, :vulnerabilities_fixed,
                 :reviewers, :assignees, :milestone, :branch_name_separator,
-                :branch_name_prefix, :github_redirection_service,
+                :branch_name_prefix, :branch_name_max_length, :github_redirection_service,
                 :custom_headers, :provider_metadata
 
     def initialize(source:, base_commit:, dependencies:, files:, credentials:,
@@ -57,7 +57,8 @@ module Dependabot
                    commit_message_options: {}, vulnerabilities_fixed: {},
                    reviewers: nil, assignees: nil, milestone: nil,
                    branch_name_separator: "/", branch_name_prefix: "dependabot",
-                   label_language: false, automerge_candidate: false,
+                   branch_name_max_length: nil, label_language: false,
+                   automerge_candidate: false,
                    github_redirection_service: DEFAULT_GITHUB_REDIRECTION_SERVICE,
                    custom_headers: nil, require_up_to_date_base: false,
                    provider_metadata: {}, message: nil)
@@ -78,6 +79,7 @@ module Dependabot
       @vulnerabilities_fixed      = vulnerabilities_fixed
       @branch_name_separator      = branch_name_separator
       @branch_name_prefix         = branch_name_prefix
+      @branch_name_max_length     = branch_name_max_length
       @label_language             = label_language
       @automerge_candidate        = automerge_candidate
       @github_redirection_service = github_redirection_service
@@ -157,7 +159,8 @@ module Dependabot
         labeler: labeler,
         approvers: reviewers,
         assignees: assignees,
-        milestone: milestone
+        milestone: milestone,
+        target_project_id: provider_metadata[:target_project_id]
       )
     end
 
@@ -188,7 +191,7 @@ module Dependabot
         pr_description: message.pr_message,
         pr_name: message.pr_name,
         author_details: author_details,
-        labeler: labeler,
+        labeler: nil,
         work_item: provider_metadata&.fetch(:work_item, nil)
       )
     end
@@ -231,7 +234,8 @@ module Dependabot
           files: files,
           target_branch: source.branch,
           separator: branch_name_separator,
-          prefix: branch_name_prefix
+          prefix: branch_name_prefix,
+          max_length: branch_name_max_length
         )
     end
 

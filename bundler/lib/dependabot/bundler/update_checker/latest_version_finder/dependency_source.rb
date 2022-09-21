@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "dependabot/registry_client"
 require "dependabot/bundler/native_helpers"
 require "dependabot/bundler/helpers"
 
@@ -61,6 +62,7 @@ module Dependabot
                 NativeHelpers.run_bundler_subprocess(
                   bundler_version: bundler_version,
                   function: "depencency_source_latest_git_version",
+                  options: options,
                   args: {
                     dir: tmp_dir,
                     gemfile_name: gemfile.name,
@@ -83,10 +85,8 @@ module Dependabot
           def rubygems_versions
             @rubygems_versions ||=
               begin
-                response = Excon.get(
-                  dependency_rubygems_uri,
-                  idempotent: true,
-                  **SharedHelpers.excon_defaults
+                response = Dependabot::RegistryClient.get(
+                  url: dependency_rubygems_uri
                 )
 
                 JSON.parse(response.body).
@@ -106,6 +106,7 @@ module Dependabot
                 NativeHelpers.run_bundler_subprocess(
                   bundler_version: bundler_version,
                   function: "private_registry_versions",
+                  options: options,
                   args: {
                     dir: tmp_dir,
                     gemfile_name: gemfile.name,
@@ -126,6 +127,7 @@ module Dependabot
               NativeHelpers.run_bundler_subprocess(
                 bundler_version: bundler_version,
                 function: "dependency_source_type",
+                options: options,
                 args: {
                   dir: tmp_dir,
                   gemfile_name: gemfile.name,

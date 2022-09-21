@@ -17,7 +17,7 @@ RSpec.describe Dependabot::Nuget::UpdateChecker::RequirementsUpdater do
     {
       file: "my.csproj",
       requirement: csproj_req_string,
-      groups: [],
+      groups: ["dependencies"],
       source: nil
     }
   end
@@ -27,8 +27,8 @@ RSpec.describe Dependabot::Nuget::UpdateChecker::RequirementsUpdater do
     {
       source_url: nil,
       repo_url: "https://api.nuget.org/v3/index.json",
-      nuspec_url: "https://api.nuget.org/v3-flatcontainer/"\
-                  "microsoft.extensions.dependencymodel/1.2.3/"\
+      nuspec_url: "https://api.nuget.org/v3-flatcontainer/" \
+                  "microsoft.extensions.dependencymodel/1.2.3/" \
                   "microsoft.extensions.dependencymodel.nuspec"
     }
   end
@@ -100,7 +100,7 @@ RSpec.describe Dependabot::Nuget::UpdateChecker::RequirementsUpdater do
           {
             file: "another/my.csproj",
             requirement: other_requirement_string,
-            groups: [],
+            groups: ["dependencies"],
             source: nil
           }
         end
@@ -112,25 +112,25 @@ RSpec.describe Dependabot::Nuget::UpdateChecker::RequirementsUpdater do
             [{
               file: "my.csproj",
               requirement: "23.6-jre",
-              groups: [],
+              groups: ["dependencies"],
               source: {
                 type: "nuget_repo",
                 url: "https://api.nuget.org/v3/index.json",
                 source_url: nil,
-                nuspec_url: "https://api.nuget.org/v3-flatcontainer/"\
-                            "microsoft.extensions.dependencymodel/1.2.3/"\
+                nuspec_url: "https://api.nuget.org/v3-flatcontainer/" \
+                            "microsoft.extensions.dependencymodel/1.2.3/" \
                             "microsoft.extensions.dependencymodel.nuspec"
               }
             }, {
               file: "another/my.csproj",
               requirement: "[23.6-jre]",
-              groups: [],
+              groups: ["dependencies"],
               source: {
                 type: "nuget_repo",
                 url: "https://api.nuget.org/v3/index.json",
                 source_url: nil,
-                nuspec_url: "https://api.nuget.org/v3-flatcontainer/"\
-                            "microsoft.extensions.dependencymodel/1.2.3/"\
+                nuspec_url: "https://api.nuget.org/v3-flatcontainer/" \
+                            "microsoft.extensions.dependencymodel/1.2.3/" \
                             "microsoft.extensions.dependencymodel.nuspec"
               }
             }]
@@ -145,19 +145,19 @@ RSpec.describe Dependabot::Nuget::UpdateChecker::RequirementsUpdater do
               [{
                 file: "my.csproj",
                 requirement: "23.6-jre",
-                groups: [],
+                groups: ["dependencies"],
                 source: {
                   type: "nuget_repo",
                   url: "https://api.nuget.org/v3/index.json",
                   source_url: nil,
-                  nuspec_url: "https://api.nuget.org/v3-flatcontainer/"\
-                              "microsoft.extensions.dependencymodel/1.2.3/"\
+                  nuspec_url: "https://api.nuget.org/v3-flatcontainer/" \
+                              "microsoft.extensions.dependencymodel/1.2.3/" \
                               "microsoft.extensions.dependencymodel.nuspec"
                 }
               }, {
                 file: "another/my.csproj",
                 requirement: "[23.0,)",
-                groups: [],
+                groups: ["dependencies"],
                 source: nil
               }]
             )

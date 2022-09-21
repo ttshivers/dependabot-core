@@ -228,6 +228,39 @@ RSpec.describe Dependabot::PullRequestCreator::Labeler do
               to_not have_requested(:post, "#{repo_api_url}/labels")
           end
         end
+
+        context "when the 'github_actions' label doesn't yet exist" do
+          before do
+            allow(described_class).to receive(:label_details_for_package_manager).
+              with("github_actions").
+              and_return({
+                colour: "000000",
+                name: "github_actions",
+                description: "Pull requests that update GitHub Actions code"
+              })
+            allow(dependency).to receive(:package_manager).and_return("github_actions")
+
+            stub_request(:get, "https://api.github.com/repos/#{source.repo}/labels?per_page=100").
+              to_return(status: 200, headers: { "Content-Type" => "application/json" }, body: JSON.generate([]))
+            stub_request(:post, "https://api.github.com/repos/#{source.repo}/labels").
+              to_return(
+                status: 201,
+                headers: { "Content-Type" => "application/json" },
+                body: JSON.generate({ id: 1, name: "github_actions", color: "000000" })
+              )
+          end
+
+          it "creates a label" do
+            labeler.create_default_labels_if_required
+
+            expect(WebMock).to have_requested(:post, "https://api.github.com/repos/#{source.repo}/labels").
+              with(body: {
+                name: "github_actions",
+                color: "000000",
+                description: "Pull requests that update GitHub Actions code"
+              })
+          end
+        end
       end
 
       context "when a custom dependencies label has been requested" do
@@ -281,7 +314,7 @@ RSpec.describe Dependabot::PullRequestCreator::Labeler do
                 body: {
                   name: "security",
                   color: "ee0701",
-                  description: "Pull requests that address a security "\
+                  description: "Pull requests that address a security " \
                                "vulnerability"
                 }
               )
@@ -337,7 +370,7 @@ RSpec.describe Dependabot::PullRequestCreator::Labeler do
           expect(WebMock).
             to have_requested(:post, "#{repo_api_url}/labels").
             with(
-              body: "description=Pull%20requests%20that%20update%20a"\
+              body: "description=Pull%20requests%20that%20update%20a" \
                     "%20dependency%20file&name=dependencies&color=%230366d6"
             )
           expect(labeler.labels_for_pr).to include("dependencies")
@@ -399,8 +432,8 @@ RSpec.describe Dependabot::PullRequestCreator::Labeler do
             expect(WebMock).
               to have_requested(:post, "#{repo_api_url}/labels").
               with(
-                body: "description=Pull%20requests%20that%20address%20a"\
-                    "%20security%20vulnerability&name=security&color=%23ee0701"
+                body: "description=Pull%20requests%20that%20address%20a" \
+                      "%20security%20vulnerability&name=security&color=%23ee0701"
               )
             expect(labeler.labels_for_pr).to include("security")
           end
@@ -698,7 +731,7 @@ RSpec.describe Dependabot::PullRequestCreator::Labeler do
         let(:pagination_header) do
           {
             "Content-Type" => "application/json",
-            "Link" => "<#{repo_api_url}/labels?page=2&per_page=100>; "\
+            "Link" => "<#{repo_api_url}/labels?page=2&per_page=100>; " \
                       "rel=\"next\""
           }
         end

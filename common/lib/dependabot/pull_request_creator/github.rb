@@ -9,6 +9,8 @@ module Dependabot
   class PullRequestCreator
     # rubocop:disable Metrics/ClassLength
     class Github
+      MAX_PR_DESCRIPTION_LENGTH = 65_536 # characters (see #create_pull_request)
+
       attr_reader :source, :branch_name, :base_commit, :credentials,
                   :files, :pr_description, :pr_name, :commit_message,
                   :author_details, :signature_key, :custom_headers,
@@ -217,7 +219,7 @@ module Dependabot
         retry_count ||= 0
         retry_count += 1
         if retry_count > 10
-          raise "Repeatedly failed to create or update branch #{branch_name} "\
+          raise "Repeatedly failed to create or update branch #{branch_name} " \
                 "with commit #{commit.sha}."
         end
 
@@ -267,7 +269,7 @@ module Dependabot
 
       def add_reviewers_to_pull_request(pull_request)
         reviewers_hash =
-          Hash[reviewers.keys.map { |k| [k.to_sym, reviewers[k]] }]
+          reviewers.keys.to_h { |k| [k.to_sym, reviewers[k]] }
 
         github_client_for_source.request_pull_request_review(
           source.repo,
@@ -297,7 +299,7 @@ module Dependabot
 
       def comment_with_invalid_reviewer(pull_request, message)
         reviewers_hash =
-          Hash[reviewers.keys.map { |k| [k.to_sym, reviewers[k]] }]
+          reviewers.keys.to_h { |k| [k.to_sym, reviewers[k]] }
         reviewers = []
         reviewers += reviewers_hash[:reviewers] || []
         reviewers += (reviewers_hash[:team_reviewers] || []).
@@ -313,9 +315,9 @@ module Dependabot
 
         msg = "Dependabot tried to add #{reviewers_string} as "
         msg += reviewers.count > 1 ? "reviewers" : "a reviewer"
-        msg += " to this PR, but received the following error from GitHub:\n\n"\
+        msg += " to this PR, but received the following error from GitHub:\n\n" \
                "```\n" \
-               "#{message}\n"\
+               "#{message}\n" \
                "```"
 
         github_client_for_source.add_comment(
@@ -347,6 +349,18 @@ module Dependabot
       end
 
       def create_pull_request
+        # Limit PR description to MAX_PR_DESCRIPTION_LENGTH (65,536) characters
+        # and truncate with message if over. The API limit is 262,144 bytes
+        # (https://github.community/t/maximum-length-for-the-comment-body-in-issues-and-pr/148867/2).
+        # As Ruby strings are UTF-8 encoded, this is a pessimistic limit: it
+        # presumes the case where all characters are 4 bytes.
+        pr_description = @pr_description.dup
+        if pr_description && pr_description.length > MAX_PR_DESCRIPTION_LENGTH
+          truncated_msg = "...\n\n_Description has been truncated_"
+          truncate_length = MAX_PR_DESCRIPTION_LENGTH - truncated_msg.length
+          pr_description = (pr_description[0, truncate_length] + truncated_msg)
+        end
+
         github_client_for_source.create_pull_request(
           source.repo,
           target_branch,

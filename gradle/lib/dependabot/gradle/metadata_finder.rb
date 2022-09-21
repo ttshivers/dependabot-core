@@ -6,6 +6,7 @@ require "dependabot/metadata_finders/base"
 require "dependabot/file_fetchers/base"
 require "dependabot/gradle/file_parser/repositories_finder"
 require "dependabot/maven/utils/auth_headers_finder"
+require "dependabot/registry_client"
 
 module Dependabot
   module Gradle
@@ -105,15 +106,13 @@ module Dependabot
         artifact_id =
           if kotlin_plugin? then "#{KOTLIN_PLUGIN_REPO_PREFIX}.#{dependency.name}.gradle.plugin"
           elsif plugin? then "#{dependency.name}.gradle.plugin"
-          else dependency.name.split(":").last
+          else
+            dependency.name.split(":").last
           end
 
-        response = Excon.get(
-          "#{maven_repo_dependency_url}/"\
-          "#{dependency.version}/"\
-          "#{artifact_id}-#{dependency.version}.pom",
-          idempotent: true,
-          **SharedHelpers.excon_defaults(headers: auth_headers)
+        response = Dependabot::RegistryClient.get(
+          url: "#{maven_repo_dependency_url}/#{dependency.version}/#{artifact_id}-#{dependency.version}.pom",
+          headers: auth_headers
         )
 
         @dependency_pom_file = Nokogiri::XML(response.body)
@@ -131,12 +130,9 @@ module Dependabot
 
         return unless artifact_id && group_id && version
 
-        response = Excon.get(
-          "#{maven_repo_url}/#{group_id.tr('.', '/')}/#{artifact_id}/"\
-          "#{version}/"\
-          "#{artifact_id}-#{version}.pom",
-          idempotent: true,
-          **SharedHelpers.excon_defaults(headers: auth_headers)
+        response = Dependabot::RegistryClient.get(
+          url: "#{maven_repo_url}/#{group_id.tr('.', '/')}/#{artifact_id}/#{version}/#{artifact_id}-#{version}.pom",
+          headers: auth_headers
         )
 
         Nokogiri::XML(response.body)
@@ -157,7 +153,8 @@ module Dependabot
             ["#{KOTLIN_PLUGIN_REPO_PREFIX}.#{dependency.name}",
              "#{KOTLIN_PLUGIN_REPO_PREFIX}.#{dependency.name}.gradle.plugin"]
           elsif plugin? then [dependency.name, "#{dependency.name}.gradle.plugin"]
-          else dependency.name.split(":")
+          else
+            dependency.name.split(":")
           end
 
         "#{maven_repo_url}/#{group_id.tr('.', '/')}/#{artifact_id}"

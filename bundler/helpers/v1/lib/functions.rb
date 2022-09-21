@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "functions/file_parser"
 require "functions/force_updater"
 require "functions/lockfile_updater"
@@ -20,7 +22,7 @@ module Functions
 
   def self.vendor_cache_dir(**args)
     set_bundler_flags_and_credentials(dir: args.fetch(:dir), credentials: [])
-    Bundler.app_cache
+    Bundler.settings.app_cache_path
   end
 
   def self.update_lockfile(**args)
@@ -124,8 +126,6 @@ module Functions
     ).conflicting_dependencies
   end
 
-  private
-
   def self.set_bundler_flags_and_credentials(dir:, credentials:)
     dir = dir ? Pathname.new(dir) : dir
     Bundler.instance_variable_set(:@root, dir)
@@ -144,6 +144,9 @@ module Functions
         token.gsub("@", "%40F").gsub("?", "%3F")
       )
     end
+
+    # Use HTTPS for GitHub if lockfile
+    Bundler.settings.set_command_option("github.https", "true")
   end
 
   def self.relevant_credentials(credentials)

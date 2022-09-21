@@ -18,14 +18,14 @@ module Dependabot
         return [] unless repo_contents_path && vendor_dir
 
         Dir.chdir(repo_contents_path) do
-          relative_dir = Pathname.new(vendor_dir).relative_path_from(
-            repo_contents_path
-          )
+          # rubocop:disable Performance/DeletePrefix
+          relative_dir = Pathname.new(base_directory).sub(%r{\A/}, "").join(vendor_dir)
+          # rubocop:enable Performance/DeletePrefix
 
           status = SharedHelpers.run_shell_command(
             "git status --untracked-files all --porcelain v1 #{relative_dir}"
           )
-          changed_paths = status.split("\n").map { |l| l.split(" ") }
+          changed_paths = status.split("\n").map(&:split)
           changed_paths.map do |type, path|
             # The following types are possible to be returned:
             # M = Modified = Default for DependencyFile
@@ -68,7 +68,8 @@ module Dependabot
       def binary_file?(path)
         return false unless File.exist?(path)
 
-        encoding = `file -b --mime-encoding #{path}`.strip
+        command = SharedHelpers.escape_command("file -b --mime-encoding #{path}")
+        encoding = `#{command}`.strip
 
         !TEXT_ENCODINGS.include?(encoding)
       end

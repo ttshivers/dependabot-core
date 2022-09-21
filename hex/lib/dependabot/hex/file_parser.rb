@@ -112,7 +112,7 @@ module Dependabot
       end
 
       def symbolize_keys(hash)
-        Hash[hash.keys.map { |k| [k.to_sym, hash[k]] }]
+        hash.keys.to_h { |k| [k.to_sym, hash[k]] }
       end
 
       def mixfiles

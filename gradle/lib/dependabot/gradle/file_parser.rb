@@ -18,7 +18,7 @@ module Dependabot
       require "dependabot/file_parsers/base/dependency_set"
       require_relative "file_parser/property_value_finder"
 
-      SUPPORTED_BUILD_FILE_NAMES = %w(build.gradle build.gradle.kts).freeze
+      SUPPORTED_BUILD_FILE_NAMES = %w(build.gradle build.gradle.kts settings.gradle settings.gradle.kts).freeze
 
       PROPERTY_REGEX =
         /
@@ -47,6 +47,19 @@ module Dependabot
           dependency_set += buildfile_dependencies(plugin_file)
         end
         dependency_set.dependencies
+      end
+
+      def self.find_include_names(buildfile)
+        return [] unless buildfile
+
+        buildfile.content.
+          scan(/apply(\(| )\s*from(\s+=|:)\s+['"]([^'"]+)['"]/).
+          map { |match| match[2] }
+      end
+
+      def self.find_includes(buildfile, dependency_files)
+        FileParser.find_include_names(buildfile).
+          filter_map { |f| dependency_files.find { |bf| bf.name == f } }
       end
 
       private
@@ -147,9 +160,9 @@ module Dependabot
 
         plugin_blocks.each do |blk|
           blk.lines.each do |line|
-            name_regex = /(id|kotlin)(\s+#{PLUGIN_ID_REGEX}|\(#{PLUGIN_ID_REGEX}\))/
+            name_regex = /(id|kotlin)(\s+#{PLUGIN_ID_REGEX}|\(#{PLUGIN_ID_REGEX}\))/o
             name = line.match(name_regex)&.named_captures&.fetch("id")
-            version_regex = /version\s+['"](?<version>#{VSN_PART})['"]/
+            version_regex = /version\s+['"](?<version>#{VSN_PART})['"]/o
             version = line.match(version_regex)&.named_captures&.
                 fetch("version")
             next unless name && version
@@ -164,7 +177,7 @@ module Dependabot
       end
 
       def extra_groups(line)
-        line.match(/kotlin(\s+#{PLUGIN_ID_REGEX}|\(#{PLUGIN_ID_REGEX}\))/) ? ["kotlin"] : []
+        line.match?(/kotlin(\s+#{PLUGIN_ID_REGEX}|\(#{PLUGIN_ID_REGEX}\))/o) ? ["kotlin"] : []
       end
 
       def argument_from_string(string, arg_name)
@@ -182,11 +195,13 @@ module Dependabot
 
         dependency_name =
           if group == "plugins" then name
-          else "#{group}:#{name}"
+          else
+            "#{group}:#{name}"
           end
         groups =
           if group == "plugins" then ["plugins"] + extra_groups
-          else []
+          else
+            []
           end
         source =
           source_from(group, name, version)
@@ -301,16 +316,13 @@ module Dependabot
       def script_plugin_files
         @script_plugin_files ||=
           buildfiles.flat_map do |buildfile|
-            buildfile.content.
-              scan(/apply from(\s+=|:)\s+['"]([^'"]+)['"]/).flatten.
-              map { |f| dependency_files.find { |bf| bf.name == f } }.
-              compact
+            FileParser.find_includes(buildfile, dependency_files)
           end.
           uniq
       end
 
       def check_required_files
-        raise "No build.gradle or build.gradle.kts!" unless original_file
+        raise "No build.gradle or build.gradle.kts!" if dependency_files.empty?
       end
 
       def original_file

@@ -69,6 +69,7 @@ module Dependabot
               NativeHelpers.run_bundler_subprocess(
                 bundler_version: bundler_version,
                 function: "update_lockfile",
+                options: options,
                 args: {
                   gemfile_name: gemfile.name,
                   lockfile_name: lockfile.name,
@@ -79,19 +80,6 @@ module Dependabot
               )
             end
           post_process_lockfile(lockfile_body)
-        rescue SharedHelpers::HelperSubprocessFailed => e
-          raise unless ruby_lock_error?(e)
-
-          @dont_lock_ruby_version = true
-          retry
-        end
-
-        def ruby_lock_error?(error)
-          return false unless error.error_class == "Bundler::VersionConflict"
-          return false unless error.message.include?(" for gem \"ruby\0\"")
-          return false if @dont_lock_ruby_version
-
-          dependency_files.any? { |f| f.name.end_with?(".gemspec") }
         end
 
         def write_temporary_dependency_files
@@ -236,12 +224,7 @@ module Dependabot
         # rubocop:enable Metrics/PerceivedComplexity
 
         def prepared_gemfile_content(file)
-          content =
-            GemfileUpdater.new(
-              dependencies: dependencies,
-              gemfile: file
-            ).updated_gemfile_content
-          return content if @dont_lock_ruby_version
+          content = updated_gemfile_content(file)
 
           top_level_gemspecs.each do |gs|
             content = RubyRequirementSetter.new(gemspec: gs).rewrite(content)

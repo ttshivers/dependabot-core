@@ -9,6 +9,7 @@ require "shellwords"
 require "rubygems/package"
 require "bundler"
 require "./common/lib/dependabot/version"
+require "yaml"
 
 GEMSPECS = %w(
   common/dependabot-common.gemspec
@@ -23,11 +24,11 @@ GEMSPECS = %w(
   bundler/dependabot-bundler.gemspec
   elm/dependabot-elm.gemspec
   cargo/dependabot-cargo.gemspec
-  dep/dependabot-dep.gemspec
   npm_and_yarn/dependabot-npm_and_yarn.gemspec
   composer/dependabot-composer.gemspec
   hex/dependabot-hex.gemspec
   python/dependabot-python.gemspec
+  pub/dependabot-pub.gemspec
   omnibus/dependabot-omnibus.gemspec
 ).freeze
 
@@ -86,6 +87,25 @@ namespace :gems do
   end
 end
 
+class Hash
+  def sort_by_key(recursive = false, &block)
+    keys.sort(&block).each_with_object({}) do |key, seed|
+      seed[key] = self[key]
+      seed[key] = seed[key].sort_by_key(true, &block) if recursive && seed[key].is_a?(Hash)
+      seed
+    end
+  end
+end
+
+namespace :rubocop do
+  task :sort do
+    File.write(
+      ".rubocop.yml",
+      YAML.load_file(".rubocop.yml").sort_by_key(true).to_yaml
+    )
+  end
+end
+
 def guard_tag_match
   tag = "v#{Dependabot::VERSION}"
   tag_commit = `git rev-list -n 1 #{tag} 2> /dev/null`.strip
@@ -113,7 +133,7 @@ def changed_packages
                  select { |gs| gs.include?("/") }.
                  map { |gs| "./" + gs.split("/").first }
 
-  compare_url = ENV["CIRCLE_COMPARE_URL"]
+  compare_url = ENV.fetch("CIRCLE_COMPARE_URL", nil)
   if compare_url.nil?
     warn "CIRCLE_COMPARE_URL not set, so changed packages can't be calculated"
     return all_packages

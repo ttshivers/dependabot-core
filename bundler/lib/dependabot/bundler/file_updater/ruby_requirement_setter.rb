@@ -11,7 +11,7 @@ module Dependabot
         class RubyVersionNotFound < StandardError; end
 
         RUBY_VERSIONS = %w(
-          1.8.7 1.9.3 2.0.0 2.1.10 2.2.10 2.3.8 2.4.10 2.5.9 2.6.7 2.7.3 3.0.1
+          1.8.7 1.9.3 2.0.0 2.1.10 2.2.10 2.3.8 2.4.10 2.5.9 2.6.7 2.7.3 3.0.1 3.1.1
         ).freeze
 
         attr_reader :gemspec
@@ -50,10 +50,10 @@ module Dependabot
         end
 
         def ruby_version
-          requirement = if !ruby_requirement.is_a?(Gem::Requirement)
-                          Dependabot::Bundler::Requirement.new(ruby_requirement)
-                        else
+          requirement = if ruby_requirement.is_a?(Gem::Requirement)
                           ruby_requirement
+                        else
+                          Dependabot::Bundler::Requirement.new(ruby_requirement)
                         end
 
           ruby_version =

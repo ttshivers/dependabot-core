@@ -18,6 +18,8 @@ module Dependabot
         require_relative "pipfile_manifest_updater"
         require_relative "setup_file_sanitizer"
 
+        DEPENDENCY_TYPES = %w(packages dev-packages).freeze
+
         attr_reader :dependencies, :dependency_files, :credentials
 
         def initialize(dependencies:, dependency_files:, credentials:)
@@ -145,7 +147,7 @@ module Dependabot
           pipfile_object = TomlRB.parse(pipfile_content)
 
           dependencies.each do |dep|
-            %w(packages dev-packages).each do |type|
+            DEPENDENCY_TYPES.each do |type|
               names = pipfile_object[type]&.keys || []
               pkg_name = names.find { |nm| normalise(nm) == dep.name }
               next unless pkg_name || subdep_type?(type)
@@ -264,34 +266,6 @@ module Dependabot
         def run_pipenv_command(command, env: pipenv_env_variables)
           run_command("pyenv local #{python_version}")
           run_command(command, env: env)
-        rescue SharedHelpers::HelperSubprocessFailed => e
-          original_error ||= e
-          msg = e.message
-
-          relevant_error =
-            if error_suggests_bad_python_version?(msg) then original_error
-            else e
-            end
-
-          raise relevant_error unless error_suggests_bad_python_version?(msg)
-          raise relevant_error if python_version.start_with?("2")
-
-          # Clear the existing virtualenv, so that we use the new Python version
-          run_command("pyenv local #{python_version}")
-          run_command("pyenv exec pipenv --rm")
-
-          @python_version = "2.7.18"
-          retry
-        ensure
-          @python_version = nil
-          FileUtils.remove_entry(".python-version", true)
-        end
-
-        def error_suggests_bad_python_version?(message)
-          return true if message.include?("UnsupportedPythonVersion")
-
-          message.include?('Command "python setup.py egg_info" failed') ||
-            message.include?("exit status 1: python setup.py egg_info")
         end
 
         def write_temporary_dependency_files(pipfile_content)
@@ -355,7 +329,8 @@ module Dependabot
             elsif user_specified_python_requirement
               parts = user_specified_python_requirement.split(".")
               parts.fill("*", (parts.length)..2).join(".")
-            else PythonVersions::PRE_INSTALLED_PYTHON_VERSIONS.first
+            else
+              PythonVersions::PRE_INSTALLED_PYTHON_VERSIONS.first
             end
 
           # Ideally, the requirement is satisfied by a Python version we support
@@ -377,9 +352,9 @@ module Dependabot
 
           # Otherwise we have to raise, giving details of the Python versions
           # that Dependabot supports
-          msg = "Dependabot detected the following Python requirement "\
-                "for your project: '#{requirement_string}'.\n\nCurrently, the "\
-                "following Python versions are supported in Dependabot: "\
+          msg = "Dependabot detected the following Python requirement " \
+                "for your project: '#{requirement_string}'.\n\nCurrently, the " \
+                "following Python versions are supported in Dependabot: " \
                 "#{PythonVersions::SUPPORTED_VERSIONS.join(', ')}."
           raise DependencyFileNotResolvable, msg
         end
