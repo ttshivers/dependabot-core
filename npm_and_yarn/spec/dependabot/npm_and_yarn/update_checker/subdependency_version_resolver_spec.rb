@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require "spec_helper"
@@ -13,18 +14,19 @@ RSpec.describe namespace::SubdependencyVersionResolver do
       dependency_files: dependency_files,
       credentials: credentials,
       ignored_versions: ignored_versions,
-      latest_allowable_version: latest_allowable_version
+      latest_allowable_version: latest_allowable_version,
+      repo_contents_path: nil
     )
   end
 
   let(:latest_allowable_version) { dependency.version }
   let(:credentials) do
-    [{
+    [Dependabot::Credential.new({
       "type" => "git_source",
       "host" => "github.com",
       "username" => "x-access-token",
       "password" => "token"
-    }]
+    })]
   end
   let(:ignored_versions) { [] }
 
@@ -48,8 +50,8 @@ RSpec.describe namespace::SubdependencyVersionResolver do
       end
 
       it "raises a helpful error" do
-        expect { latest_resolvable_version }.
-          to raise_error("Not a subdependency!")
+        expect { latest_resolvable_version }
+          .to raise_error("Not a subdependency!")
       end
     end
 
@@ -72,6 +74,24 @@ RSpec.describe namespace::SubdependencyVersionResolver do
 
     context "with a yarn.lock" do
       let(:dependency_files) { project_dependency_files("yarn/no_lockfile_change") }
+
+      let(:dependency) do
+        Dependabot::Dependency.new(
+          name: "acorn",
+          version: "5.1.1",
+          requirements: [],
+          package_manager: "npm_and_yarn"
+        )
+      end
+      let(:latest_allowable_version) { "6.0.2" }
+
+      # NOTE: The latest vision is 6.0.2, but we can't reach it as other
+      # dependencies constrain us
+      it { is_expected.to eq(Gem::Version.new("5.7.4")) }
+    end
+
+    context "with a pnpm-lock.yaml" do
+      let(:dependency_files) { project_dependency_files("pnpm/no_lockfile_change") }
 
       let(:dependency) do
         Dependabot::Dependency.new(

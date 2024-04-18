@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 require "dependabot/bundler/file_parser"
@@ -37,9 +38,13 @@ module Dependabot
 
         private
 
-        attr_reader :dependency, :dependency_files, :repo_contents_path,
-                    :credentials, :target_version, :requirements_update_strategy,
-                    :options
+        attr_reader :dependency
+        attr_reader :dependency_files
+        attr_reader :repo_contents_path
+        attr_reader :credentials
+        attr_reader :target_version
+        attr_reader :requirements_update_strategy
+        attr_reader :options
 
         def update_multiple_dependencies?
           @update_multiple_dependencies
@@ -115,9 +120,9 @@ module Dependabot
         end
 
         def source_for(dependency)
-          dependency.requirements.
-            find { |r| r.fetch(:source) }&.
-            fetch(:source)
+          dependency.requirements
+                    .find { |r| r.fetch(:source) }
+                    &.fetch(:source)
         end
 
         def gemfile

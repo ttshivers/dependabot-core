@@ -1,14 +1,20 @@
+# typed: true
 # frozen_string_literal: true
 
+require "sorbet-runtime"
+
+require "dependabot/errors"
+require "dependabot/github_actions/requirement"
+require "dependabot/github_actions/version"
 require "dependabot/update_checkers"
 require "dependabot/update_checkers/base"
-require "dependabot/errors"
-require "dependabot/github_actions/version"
-require "dependabot/github_actions/requirement"
+require "dependabot/update_checkers/version_filters"
 
 module Dependabot
   module GithubActions
     class UpdateChecker < Dependabot::UpdateCheckers::Base
+      extend T::Sig
+
       def latest_version
         @latest_version ||= fetch_latest_version
       end
@@ -23,24 +29,43 @@ module Dependabot
         dependency.version
       end
 
-      def updated_requirements # rubocop:disable Metrics/PerceivedComplexity
-        previous = dependency_source_details
-        updated = updated_source
-        return dependency.requirements if updated == previous
+      def lowest_security_fix_version
+        @lowest_security_fix_version ||= fetch_lowest_security_fix_version
+      end
 
-        # Maintain a short git hash only if it matches the latest
-        if previous[:type] == "git" &&
-           previous[:url] == updated[:url] &&
-           updated[:ref]&.match?(/^[0-9a-f]{6,40}$/) &&
-           previous[:ref]&.match?(/^[0-9a-f]{6,40}$/) &&
-           updated[:ref]&.start_with?(previous[:ref])
-          return dependency.requirements
+      def lowest_resolvable_security_fix_version
+        # Resolvability isn't an issue for GitHub Actions.
+        lowest_security_fix_version
+      end
+
+      def updated_requirements
+        dependency.requirements.map do |req|
+          source = req[:source]
+          updated = updated_ref(source)
+          next req unless updated
+
+          current = source[:ref]
+
+          # Maintain a short git hash only if it matches the latest
+          if req[:type] == "git" &&
+             git_commit_checker.ref_looks_like_commit_sha?(updated) &&
+             git_commit_checker.ref_looks_like_commit_sha?(current) &&
+             updated.start_with?(current)
+            next req
+          end
+
+          new_source = source.merge(ref: updated)
+          req.merge(source: new_source)
         end
-
-        dependency.requirements.map { |req| req.merge(source: updated) }
       end
 
       private
+
+      def active_advisories
+        security_advisories.select do |advisory|
+          advisory.vulnerable?(version_class.new(git_commit_checker.most_specific_tag_equivalent_to_pinned_ref))
+        end
+      end
 
       def latest_version_resolvable_with_full_unlock?
         # Full unlock checks aren't relevant for GitHub Actions
@@ -65,14 +90,14 @@ module Dependabot
         # we want to update that tag.
         if git_commit_checker.pinned_ref_looks_like_version? && latest_version_tag
           latest_version = latest_version_tag.fetch(:version)
-          return version_class.new(dependency.version) if shortened_semver_eq?(dependency.version, latest_version.to_s)
+          return current_version if shortened_semver_eq?(dependency.version, latest_version.to_s)
 
           return latest_version
         end
 
         if git_commit_checker.pinned_ref_looks_like_commit_sha? && latest_version_tag
           latest_version = latest_version_tag.fetch(:version)
-          return latest_commit_for_pinned_ref unless git_commit_checker.branch_or_ref_in_release?(latest_version)
+          return latest_commit_for_pinned_ref unless git_commit_checker.local_tag_for_pinned_sha
 
           return latest_version
         end
@@ -82,88 +107,114 @@ module Dependabot
         nil
       end
 
-      def latest_commit_for_pinned_ref
-        @latest_commit_for_pinned_ref ||=
-          SharedHelpers.in_a_temporary_repo_directory("/", repo_contents_path) do
-            ref_branch = find_container_branch(current_commit)
+      def fetch_lowest_security_fix_version
+        # TODO: Support Docker sources
+        return unless git_dependency?
 
-            git_commit_checker.head_commit_for_local_branch(ref_branch)
+        fetch_lowest_security_fix_version_for_git_dependency
+      end
+
+      def fetch_lowest_security_fix_version_for_git_dependency
+        lowest_security_fix_version_tag.fetch(:version)
+      end
+
+      def lowest_security_fix_version_tag
+        @lowest_security_fix_version_tag ||= begin
+          tags_matching_precision = git_commit_checker.local_tags_for_allowed_versions_matching_existing_precision
+          lowest_fixed_version = find_lowest_secure_version(tags_matching_precision)
+          if lowest_fixed_version
+            lowest_fixed_version
+          else
+            tags = git_commit_checker.local_tags_for_allowed_versions
+            find_lowest_secure_version(tags)
           end
+        end
+      end
+
+      def find_lowest_secure_version(tags)
+        relevant_tags = Dependabot::UpdateCheckers::VersionFilters.filter_vulnerable_versions(tags, security_advisories)
+        relevant_tags = filter_lower_tags(relevant_tags)
+
+        relevant_tags.min_by { |tag| tag.fetch(:version) }
+      end
+
+      def latest_commit_for_pinned_ref
+        @latest_commit_for_pinned_ref ||= begin
+          head_commit_for_ref_sha = git_commit_checker.head_commit_for_pinned_ref
+          if head_commit_for_ref_sha
+            head_commit_for_ref_sha
+          else
+            url = git_commit_checker.dependency_source_details[:url]
+            source = T.must(Source.from_url(url))
+
+            SharedHelpers.in_a_temporary_directory(File.dirname(source.repo)) do |temp_dir|
+              repo_contents_path = File.join(temp_dir, File.basename(source.repo))
+
+              SharedHelpers.run_shell_command("git clone --no-recurse-submodules #{url} #{repo_contents_path}")
+
+              Dir.chdir(repo_contents_path) do
+                ref_branch = find_container_branch(git_commit_checker.dependency_source_details[:ref])
+                git_commit_checker.head_commit_for_local_branch(ref_branch) if ref_branch
+              end
+            end
+          end
+        end
       end
 
       def latest_version_tag
         @latest_version_tag ||= begin
           return git_commit_checker.local_tag_for_latest_version if dependency.version.nil?
 
-          latest_tags = git_commit_checker.local_tags_for_latest_version_commit_sha
+          ref = git_commit_checker.local_ref_for_latest_version_matching_existing_precision
+          return ref if ref && ref.fetch(:version) > current_version
 
-          # Find the latest version with the same precision as the pinned version.
-          # Falls back to a version with the closest precision if no exact match.
-          current_dots = dependency.version.split(".").length
-          latest_tags.max do |a, b|
-            next a[:version] <=> b[:version] unless shortened_semver_version_eq?(a[:version], b[:version])
-
-            a_dots = a[:version].to_s.split(".").length
-            b_dots = b[:version].to_s.split(".").length
-            a_diff = (a_dots - current_dots).abs
-            b_diff = (b_dots - current_dots).abs
-            next -(a_diff <=> b_diff) unless a_diff == b_diff
-
-            # preference to a less specific version if we have a tie
-            next 1 if a_dots < current_dots
-
-            -1
-          end
+          git_commit_checker.local_ref_for_latest_version_lower_precision
         end
       end
 
-      def updated_source
+      def filter_lower_tags(tags_array)
+        return tags_array unless current_version
+
+        tags_array
+          .select { |tag| tag.fetch(:version) > current_version }
+      end
+
+      def updated_ref(source)
         # TODO: Support Docker sources
-        return dependency_source_details unless git_dependency?
+        return unless git_dependency?
 
-        # Update the git tag if updating a pinned version
-        if git_commit_checker.pinned_ref_looks_like_version? &&
-           (new_tag = latest_version_tag) &&
-           new_tag.fetch(:commit_sha) != current_commit
-          return dependency_source_details.merge(ref: new_tag.fetch(:tag))
+        if vulnerable? &&
+           (new_tag = lowest_security_fix_version_tag)
+          return new_tag.fetch(:tag)
         end
 
-        # Update the pinned git commit if one is available
-        if git_commit_checker.pinned_ref_looks_like_commit_sha? &&
-           (new_commit_sha = latest_commit_sha) &&
-           new_commit_sha != current_commit
-          return dependency_source_details.merge(ref: new_commit_sha)
+        source_git_commit_checker = git_commit_checker_for(source)
+
+        # Return the git tag if updating a pinned version
+        if source_git_commit_checker.pinned_ref_looks_like_version? &&
+           (new_tag = latest_version_tag)
+          return new_tag.fetch(:tag)
         end
 
-        # Otherwise return the original source
-        dependency_source_details
+        # Return the pinned git commit if one is available
+        if source_git_commit_checker.pinned_ref_looks_like_commit_sha? &&
+           (new_commit_sha = latest_commit_sha)
+          return new_commit_sha
+        end
+
+        # Otherwise we can't update the ref
+        nil
       end
 
       def latest_commit_sha
         new_tag = latest_version_tag
         return unless new_tag
 
-        if git_commit_checker.branch_or_ref_in_release?(new_tag.fetch(:version))
+        if git_commit_checker.local_tag_for_pinned_sha
           new_tag.fetch(:commit_sha)
         else
           latest_commit_for_pinned_ref
         end
-      end
-
-      def dependency_source_details
-        sources =
-          dependency.requirements.map { |r| r.fetch(:source) }.uniq.compact
-
-        return sources.first if sources.count <= 1
-
-        # If there are multiple source types, or multiple source URLs, then it's
-        # unclear how we should proceed
-        raise "Multiple sources! #{sources.join(', ')}" if sources.map { |s| [s.fetch(:type), s[:url]] }.uniq.count > 1
-
-        # Otherwise it's reasonable to take the first source and use that. This
-        # will happen if we have multiple git sources with difference references
-        # specified. In that case it's fine to update them all.
-        sources.first
       end
 
       def current_commit
@@ -175,11 +226,19 @@ module Dependabot
       end
 
       def git_commit_checker
-        @git_commit_checker ||= Dependabot::GitCommitChecker.new(
+        @git_commit_checker ||= git_commit_checker_for(nil)
+      end
+
+      def git_commit_checker_for(source)
+        @git_commit_checkers ||= {}
+
+        @git_commit_checkers[source] ||= Dependabot::GitCommitChecker.new(
           dependency: dependency,
           credentials: credentials,
           ignored_versions: ignored_versions,
-          raise_on_ignored: raise_on_ignored
+          raise_on_ignored: raise_on_ignored,
+          consider_version_branches_pinned: true,
+          dependency_source_details: source
         )
       end
 
@@ -193,25 +252,20 @@ module Dependabot
         other_split[0..base_split.length - 1] == base_split
       end
 
-      def shortened_semver_version_eq?(base_version, other_version)
-        base = base_version.to_s
-        other = other_version.to_s
-
-        shortened_semver_eq?(base, other) || shortened_semver_eq?(other, base)
-      end
-
       def find_container_branch(sha)
-        SharedHelpers.run_shell_command("git fetch #{current_commit}")
+        branches_including_ref = SharedHelpers.run_shell_command(
+          "git branch --remotes --contains #{sha}",
+          fingerprint: "git branch --remotes --contains <sha>"
+        ).split("\n").map { |branch| branch.strip.gsub("origin/", "") }
+        return if branches_including_ref.empty?
 
-        branches_including_ref = SharedHelpers.run_shell_command("git branch --contains #{sha}").split("\n")
-
-        current_branch = branches_including_ref.find { |line| line.start_with?("* ") }
+        current_branch = branches_including_ref.find { |branch| branch.start_with?("HEAD -> ") }
 
         if current_branch
-          current_branch.delete_prefix("* ")
+          current_branch.delete_prefix("HEAD -> ")
         elsif branches_including_ref.size > 1
           # If there are multiple non default branches including the pinned SHA, then it's unclear how we should proceed
-          raise "Multiple ambiguous branches (#{branches_including_ref.join(', ')}) include #{current_commit}!"
+          raise "Multiple ambiguous branches (#{branches_including_ref.join(', ')}) include #{sha}!"
         else
           branches_including_ref.first
         end
@@ -220,5 +274,5 @@ module Dependabot
   end
 end
 
-Dependabot::UpdateCheckers.
-  register("github_actions", Dependabot::GithubActions::UpdateChecker)
+Dependabot::UpdateCheckers
+  .register("github_actions", Dependabot::GithubActions::UpdateChecker)

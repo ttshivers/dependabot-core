@@ -8,24 +8,25 @@ Dart (pub) support for [`dependabot-core`][core-repo].
    * `dart pub` in general doesn't read versions numbers from git, so upgrade logic is limited to upgrading to what the 'ref' is pointing to.
    * If you pin to a specific revision in `pubspec.yaml` dependabot will not find upgrades.
    * If you give a branch in `pubspec.yaml` dependabot will upgrade to the
-     latest revision that branch is pointing to, and update pubspec.lock
+     latest revision that branch is pointing to, and update `pubspec.lock`
      accordingly.
- - No support for security advisory integration.
- - If the version found is ignored (by dependabot config) no update will happen (even if, an earlier version could be used)
+ - Security updates currently bump to the latest version. If the latest version is vulnerable, no update will happen (even if an earlier version could be used). Changing the upgrade strategy to use the minimum non-vulnerable version is tracked in https://github.com/dependabot/dependabot-core/issues/5391.
+ - If the version found is ignored (by dependabot config) no update will happen (even if an earlier version could be used)
  - Limited metadata support (just retrieves the repository link).
- - No support for auhtentication of private package repositories (mostly a configuration issue).
+ - No support for authentication of private package repositories (mostly a configuration issue).
  - `updated_dependencies_after_full_unlock` only allows updating to a later version, if the latest version that is mutually compatible with other dependencies is the latest version of the said package. This is a dependabot limitation.
 
 ### Running locally
 
-1. Install Ruby dependencies
-   ```
-   $ bundle install
-   ```
+1. Start a development shell
+
+  ```
+  $ bin/docker-dev-shell pub
+  ```
 
 2. Run tests
    ```
-   $ bundle exec rspec spec
+   [dependabot-core-dev] ~ $ cd pub && rspec
    ```
 
 [core-repo]: https://github.com/dependabot/dependabot-core

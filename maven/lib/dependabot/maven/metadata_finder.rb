@@ -1,9 +1,10 @@
+# typed: false
 # frozen_string_literal: true
 
 require "nokogiri"
 require "dependabot/metadata_finders"
 require "dependabot/metadata_finders/base"
-require "dependabot/file_fetchers/base"
+require "dependabot/maven/file_fetcher"
 require "dependabot/maven/file_parser"
 require "dependabot/maven/file_parser/repositories_finder"
 require "dependabot/maven/utils/auth_headers_finder"
@@ -12,7 +13,7 @@ require "dependabot/registry_client"
 module Dependabot
   module Maven
     class MetadataFinder < Dependabot::MetadataFinders::Base
-      DOT_SEPARATOR_REGEX = %r{\.(?!\d+([.\/_\-]|$)+)}.freeze
+      DOT_SEPARATOR_REGEX = %r{\.(?!\d+([.\/_\-]|$)+)}
 
       private
 
@@ -26,7 +27,8 @@ module Dependabot
         return unless tmp_source
 
         return tmp_source if tmp_source.repo.end_with?(dependency_artifact_id)
-        return tmp_source if repo_has_subdir_for_dep?(tmp_source)
+
+        tmp_source if repo_has_subdir_for_dep?(tmp_source)
       end
 
       def repo_has_subdir_for_dep?(tmp_source)
@@ -34,15 +36,15 @@ module Dependabot
         return @repo_has_subdir_for_dep[tmp_source] if @repo_has_subdir_for_dep.key?(tmp_source)
 
         fetcher =
-          FileFetchers::Base.new(source: tmp_source, credentials: credentials)
+          Dependabot::Maven::FileFetcher.new(source: tmp_source, credentials: credentials)
 
         @repo_has_subdir_for_dep[tmp_source] =
-          fetcher.send(:repo_contents, raise_errors: false).
-          select { |f| f.type == "dir" }.
-          any? { |f| dependency_artifact_id.end_with?(f.name) }
+          fetcher.send(:repo_contents, raise_errors: false)
+                 .select { |f| f.type == "dir" }
+                 .any? { |f| dependency_artifact_id.end_with?(f.name) }
       rescue Dependabot::BranchNotFound
         # If we are attempting to find a branch, we should fail over to the default branch and retry once only
-        if tmp_source.branch.present?
+        unless tmp_source.branch.to_s.empty?
           tmp_source.branch = nil
           retry
         end
@@ -116,7 +118,7 @@ module Dependabot
       end
 
       def dependency_artifact_id
-        _group_id, artifact_id, _classifier = dependency.name.split(":")
+        _group_id, artifact_id = dependency.name.split(":")
 
         artifact_id
       end
@@ -144,12 +146,12 @@ module Dependabot
       end
 
       def maven_repo_url
-        source = dependency.requirements.
-                 find { |r| r&.fetch(:source) }&.fetch(:source)
+        source = dependency.requirements
+                           .find { |r| r&.fetch(:source) }&.fetch(:source)
 
         source&.fetch(:url, nil) ||
           source&.fetch("url") ||
-          Maven::FileParser::RepositoriesFinder::CENTRAL_REPO_URL
+          Maven::FileParser::RepositoriesFinder.new(credentials: credentials).central_repo_url
       end
 
       def maven_repo_dependency_url
@@ -165,5 +167,5 @@ module Dependabot
   end
 end
 
-Dependabot::MetadataFinders.
-  register("maven", Dependabot::Maven::MetadataFinder)
+Dependabot::MetadataFinders
+  .register("maven", Dependabot::Maven::MetadataFinder)

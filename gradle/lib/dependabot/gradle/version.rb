@@ -1,7 +1,8 @@
+# typed: true
 # frozen_string_literal: true
 
+require "dependabot/version"
 require "dependabot/utils"
-require "rubygems_version_patch"
 
 # Java versions use dots and dashes when tokenising their versions.
 # Gem::Version converts a "-" to ".pre.", so we override the `to_s` method.
@@ -10,7 +11,7 @@ require "rubygems_version_patch"
 
 module Dependabot
   module Gradle
-    class Version < Gem::Version
+    class Version < Dependabot::Version
       NULL_VALUES = %w(0 final ga).freeze
       PREFIXED_TOKEN_HIERARCHY = {
         "." => { qualifier: 1, number: 4 },
@@ -30,7 +31,7 @@ module Dependabot
         "[0-9a-zA-Z]+" \
         '(?>\.[0-9a-zA-Z]*)*' \
         '([_\-\+][0-9A-Za-z_-]*(\.[0-9A-Za-z_-]*)*)?'
-      ANCHORED_VERSION_PATTERN = /\A\s*(#{VERSION_PATTERN})?\s*\z/.freeze
+      ANCHORED_VERSION_PATTERN = /\A\s*(#{VERSION_PATTERN})?\s*\z/
 
       def self.correct?(version)
         return false if version.nil?
@@ -153,6 +154,10 @@ module Dependabot
       end
 
       def compare_prefixed_token(prefix:, token:, other_prefix:, other_token:)
+        return 1 if token == "+" && other_token != "+"
+        return -1 if other_token == "+" && token != "+"
+        return 0 if token == "+" && other_token == "+"
+
         token_type = token.match?(/^\d+$/) ? :number : :qualifier
         other_token_type = other_token.match?(/^\d+$/) ? :number : :qualifier
 

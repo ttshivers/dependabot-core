@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 require "open3"
@@ -65,7 +66,8 @@ module Dependabot
 
         private
 
-        attr_reader :dependency, :dependency_files
+        attr_reader :dependency
+        attr_reader :dependency_files
 
         def fetch_latest_resolvable_version(unlock_requirement)
           changed_deps = install_metadata
@@ -85,9 +87,9 @@ module Dependabot
 
         def check_install_result(changed_deps)
           other_deps_bumped =
-            changed_deps.
-            keys.
-            reject { |name| name == dependency.name }
+            changed_deps
+            .keys
+            .reject { |name| name == dependency.name }
 
           return :forced_full_unlock_bump if other_deps_bumped.any?
 
@@ -182,11 +184,11 @@ module Dependabot
         end
 
         def version_class
-          Elm::Version
+          dependency.version_class
         end
 
         def requirement_class
-          Elm::Requirement
+          dependency.requirement_class
         end
       end
     end

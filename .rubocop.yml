@@ -1,21 +1,27 @@
 ---
-require: rubocop-performance
+require:
+  - rubocop-performance
+  - rubocop-rspec
+  - rubocop-sorbet
 
 AllCops:
   DisplayCopNames: true
   Exclude:
     - "*/vendor/**/*"
-    - "*/bin/**/*"
     - "**/tmp/**/*"
     - "*/spec/fixtures/**/*"
+    - "vendor/**/*"
+    - "dry-run/**/*"
   NewCops: enable
   SuggestExtensions: false
 Gemspec/DeprecatedAttributeAssignment:
   Enabled: true
+Gemspec/DevelopmentDependencies:
+  Enabled: false
 Gemspec/RequireMFA:
   Enabled: false
 Layout/DotPosition:
-  EnforcedStyle: trailing
+  EnforcedStyle: leading # See https://srb.help/2001
 Layout/EmptyLinesAroundAttributeAccessor:
   Enabled: false
 Layout/FirstArrayElementIndentation:
@@ -221,7 +227,7 @@ Performance/UnfreezeString:
 Performance/UriDefaultParser:
   Enabled: true
 Style/AccessorGrouping:
-  Enabled: false
+  EnforcedStyle: 'separated'
 Style/ArgumentsForwarding:
   Enabled: true
 Style/ArrayCoercion:
@@ -256,6 +262,8 @@ Style/HashExcept:
   Enabled: true
 Style/HashLikeCase:
   Enabled: false
+Style/HashSyntax:
+  EnforcedShorthandSyntax: either
 Style/HashTransformKeys:
   Enabled: false
 Style/HashTransformValues:
@@ -274,6 +282,9 @@ Style/NegatedIfElseCondition:
   Enabled: true
 Style/NilLambda:
   Enabled: true
+Style/NumericPredicate:
+  Exclude:
+    - "*/spec/**/*"
 Style/OptionalBooleanParameter:
   Enabled: false
 Style/PercentLiteralDelimiters:
@@ -287,6 +298,8 @@ Style/QuotedSymbols:
 Style/RedundantArgument:
   Enabled: true
 Style/RedundantAssignment:
+  Enabled: false
+Style/RedundantConstantBase:
   Enabled: false
 Style/RedundantFetchBlock:
   Enabled: false
@@ -319,4 +332,28 @@ Style/OpenStructUse:
 Style/SpecialGlobalVars:
   Enabled: false
 Style/SelectByRegexp:
+  Enabled: false
+Sorbet/TrueSigil:
+  Exclude:
+    - "**/spec/**/*"
+Sorbet/StrictSigil:
+  Exclude:
+    - "**/spec/**/*"
+Sorbet/StrongSigil:
+  Exclude:
+    - "**/spec/**/*"
+RSpec:
+  Include:
+    - "**/spec/**/*"
+
+# TODO: Fix these and re-enable
+RSpec/FilePath:
+  Enabled: false
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+# TODO these were temporarily disabled during the Ruby 2.7 -> 3.1 upgrade
+# in order to keep the upgrade diff small, they will be enabled/fixed in
+# a follow-on PR.
+Naming/BlockForwarding:
   Enabled: false

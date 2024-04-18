@@ -1,31 +1,61 @@
+# typed: strict
 # frozen_string_literal: true
 
-# Heroku's ruby buildpack freezes the Gemfile to prevent accidental damage
-# However, we actually *want* to manipulate Gemfiles for other repos.
-Bundler.settings.set_command_option(:frozen, "0")
+require "sentry-ruby"
+require "sorbet-runtime"
 
-require "dependabot/sentry"
-Raven.configure do |config|
-  config.processors += [ExceptionSanitizer]
-end
-
-require "logger"
+require "dependabot/environment"
 require "dependabot/logger"
-
-class LoggerFormatter < Logger::Formatter
-  # Strip out timestamps as these are included in the runner's logger
-  def call(severity, _datetime, _progname, msg)
-    "#{severity} #{msg2str(msg)}\n"
-  end
-end
+require "dependabot/logger/formats"
+require "dependabot/opentelemetry"
+require "dependabot/sentry"
+require "dependabot/sorbet/runtime"
 
 Dependabot.logger = Logger.new($stdout).tap do |logger|
-  logger.formatter = LoggerFormatter.new
+  logger.level = Dependabot::Environment.log_level
+  logger.formatter = Dependabot::Logger::BasicFormatter.new
 end
 
-# We configure `Dependabot::Utils.register_always_clone` for some ecosystems. In
-# order for that configuration to take effect, we need to make sure that these
-# registration commands have been executed.
+Sentry.init do |config|
+  config.release = ENV.fetch("DEPENDABOT_UPDATER_VERSION")
+  config.logger = Dependabot.logger
+  config.project_root = File.expand_path("../../..", __dir__)
+
+  config.app_dirs_pattern = %r{(
+    dependabot-updater/bin|
+    dependabot-updater/config|
+    dependabot-updater/lib|
+    common|
+    python|
+    terraform|
+    elm|
+    docker|
+    git_submodules|
+    github_actions|
+    composer|
+    nuget|
+    gradle|
+    maven|
+    hex|
+    cargo|
+    go_modules|
+    npm_and_yarn|
+    bundler|
+    pub|
+    silent|
+    swift|
+    devcontainers
+  )}x
+
+  config.before_send = ->(event, hint) { Dependabot::Sentry.process_chain(event, hint) }
+  config.propagate_traces = false
+  config.instrumenter = ::Dependabot::OpenTelemetry.should_configure? ? :otel : :sentry
+end
+
+Dependabot::OpenTelemetry.configure
+Dependabot::Sorbet::Runtime.silently_report_errors!
+
+# Ecosystems
 require "dependabot/python"
 require "dependabot/terraform"
 require "dependabot/elm"
@@ -42,5 +72,6 @@ require "dependabot/go_modules"
 require "dependabot/npm_and_yarn"
 require "dependabot/bundler"
 require "dependabot/pub"
-
-require "dependabot/instrumentation"
+require "dependabot/silent"
+require "dependabot/swift"
+require "dependabot/devcontainers"

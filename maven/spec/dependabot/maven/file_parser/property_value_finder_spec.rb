@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require "spec_helper"
@@ -36,6 +37,12 @@ RSpec.describe Dependabot::Maven::FileParser::PropertyValueFinder do
         its([:value]) { is_expected.to eq("0.0.2-RELEASE") }
       end
 
+      context "and the property name starts with 'project' but not an attribute of the project" do
+        let(:base_pom_fixture_name) { "property_name_starts_with_project_pom.xml" }
+        let(:property_name) { "project.dependency.spring-boot.version" }
+        its([:value]) { is_expected.to eq("2.2.1.RELEASE") }
+      end
+
       context "and the property is within a profile" do
         let(:base_pom_fixture_name) { "profile_property_pom.xml" }
         its([:value]) { is_expected.to eq("4.3.12.RELEASE") }
@@ -44,6 +51,28 @@ RSpec.describe Dependabot::Maven::FileParser::PropertyValueFinder do
       context "when the property contains a tricky to split string" do
         let(:property_name) { "accumulo.1.6.version" }
         specify { expect { property_details }.to_not raise_error }
+      end
+
+      context "and in case of duplicate tags then read the latest" do
+        let(:base_pom_fixture_name) { "property_pom_duplicate_tags.xml" }
+        let(:property_name) { "jmh.version" }
+        its([:value]) { is_expected.to eq("1.2.7") }
+      end
+
+      context "and the latest tag is pointing to self then raise the error" do
+        let(:base_pom_fixture_name) { "property_pom_duplicate_tags.xml" }
+        let(:property_name) { "dozer.version" }
+        it "raises a helpful error" do
+          expect { subject }.to raise_error(Dependabot::DependencyFileNotParseable) do |error|
+            expect(error.message).to eq("Error trying to resolve recursive expression '${dozer.version}'.")
+          end
+        end
+      end
+
+      context "and the latest tag is pointing to another tag, then get the value of that tag" do
+        let(:base_pom_fixture_name) { "property_pom_duplicate_tags.xml" }
+        let(:property_name) { "orika.version" }
+        its([:value]) { is_expected.to eq("1.2.7") }
       end
     end
 
@@ -99,17 +128,17 @@ RSpec.describe Dependabot::Maven::FileParser::PropertyValueFinder do
       end
 
       before do
-        stub_request(:get, struts_apps_maven_url).
-          to_return(status: 200, body: struts_apps_maven_response)
-        stub_request(:get, struts_parent_maven_url).
-          to_return(status: 200, body: struts_parent_maven_response)
+        stub_request(:get, struts_apps_maven_url)
+          .to_return(status: 200, body: struts_apps_maven_response)
+        stub_request(:get, struts_parent_maven_url)
+          .to_return(status: 200, body: struts_parent_maven_response)
       end
       its([:value]) { is_expected.to eq("2.7") }
 
       context "that can't be found" do
         before do
-          stub_request(:get, struts_apps_maven_url).
-            to_return(status: 404, body: "")
+          stub_request(:get, struts_apps_maven_url)
+            .to_return(status: 404, body: "")
         end
 
         it { is_expected.to be_nil }
@@ -143,10 +172,10 @@ RSpec.describe Dependabot::Maven::FileParser::PropertyValueFinder do
         end
 
         before do
-          stub_request(:get, scala_plugins_maven_url).
-            to_return(status: 404, body: "")
-          stub_request(:get, scala_plugins_jboss_url).
-            to_return(status: 200, body: scala_plugins_jboss_response)
+          stub_request(:get, scala_plugins_maven_url)
+            .to_return(status: 404, body: "")
+          stub_request(:get, scala_plugins_jboss_url)
+            .to_return(status: 200, body: scala_plugins_jboss_response)
         end
 
         its([:value]) { is_expected.to eq("2.7") }

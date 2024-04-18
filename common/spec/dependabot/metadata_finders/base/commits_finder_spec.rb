@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require "octokit"
@@ -42,8 +43,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
     )
   end
   before do
-    stub_request(:get, service_pack_url).
-      to_return(
+    stub_request(:get, service_pack_url)
+      .to_return(
         status: 200,
         body: fixture("git", "upload_packs", upload_pack_fixture),
         headers: {
@@ -100,28 +101,28 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
       let(:upload_pack_fixture) { "business" }
 
       it do
-        is_expected.
-          to eq("https://github.com/gocardless/business/commits/v1.4.0")
+        is_expected
+          .to eq("https://github.com/gocardless/business/commits/v1.4.0")
       end
 
       context "and a directory" do
         before { source.directory = "my/directory" }
 
         it "doesn't include the directory (since it is unreliable)" do
-          expect(commits_url).
-            to eq("https://github.com/gocardless/business/commits/v1.4.0")
+          expect(commits_url)
+            .to eq("https://github.com/gocardless/business/commits/v1.4.0")
         end
 
         context "for a package manager with reliable source directories" do
           before do
-            allow(builder).
-              to receive(:reliable_source_directory?).
-              and_return(true)
+            allow(builder)
+              .to receive(:reliable_source_directory?)
+              .and_return(true)
           end
 
           it "includes the directory" do
-            expect(commits_url).
-              to eq(
+            expect(commits_url)
+              .to eq(
                 "https://github.com/gocardless/business/commits/" \
                 "v1.4.0/my/directory"
               )
@@ -131,8 +132,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
             before { source.directory = "./my/directory" }
 
             it "joins the directory correctly" do
-              expect(commits_url).
-                to eq(
+              expect(commits_url)
+                .to eq(
                   "https://github.com/gocardless/business/commits/" \
                   "v1.4.0/my/directory"
                 )
@@ -144,9 +145,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
 
     context "with a github repo and tags with surprising names" do
       before do
-        allow(builder).
-          to receive(:fetch_dependency_tags).
-          and_return(
+        allow(builder)
+          .to receive(:fetch_dependency_tags)
+          .and_return(
             %w(
               business-1.4.0.beta
               business-21.4.0
@@ -175,9 +176,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
           )
         end
         before do
-          allow(builder).
-            to receive(:fetch_dependency_tags).
-            and_return(
+          allow(builder)
+            .to receive(:fetch_dependency_tags)
+            .and_return(
               %w(
                 @pollyjs/utils@0.1.0
                 @pollyjs/persister@0.2.0
@@ -215,9 +216,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
 
         before do
-          allow(builder).
-            to receive(:reliable_source_directory?).
-            and_return(true)
+          allow(builder)
+            .to receive(:reliable_source_directory?)
+            .and_return(true)
         end
 
         it do
@@ -247,9 +248,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
 
     context "with a github repo and tags with no prefix" do
       before do
-        allow(builder).
-          to receive(:fetch_dependency_tags).
-          and_return(%w(1.5.0 1.4.0 1.3.0))
+        allow(builder)
+          .to receive(:fetch_dependency_tags)
+          .and_return(%w(1.5.0 1.4.0 1.3.0))
       end
 
       it do
@@ -261,8 +262,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
     context "with a github repo that has a DMCA takedown notice" do
       let(:url) { "https://github.com/gocardless/business.git" }
       before do
-        stub_request(:get, service_pack_url).
-          to_return(
+        stub_request(:get, service_pack_url)
+          .to_return(
             status: 503,
             body: fixture("github", "dmca_takedown.txt"),
             headers: {
@@ -305,8 +306,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
       end
 
       it "uses the SHA-1 hashes to build the compare URL" do
-        expect(builder.commits_url).
-          to eq(
+        expect(builder.commits_url)
+          .to eq(
             "https://github.com/gocardless/business/compare/" \
             "7638417db6d59f3c431d3e1f261cc637155684cd..." \
             "cd8274d15fa3ae2ab983129fb037999f264ba9a7"
@@ -342,8 +343,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
 
         it "uses the refs to build the compare URL" do
-          expect(builder.commits_url).
-            to eq(
+          expect(builder.commits_url)
+            .to eq(
               "https://github.com/gocardless/business/compare/v1.3.0...v1.4.0"
             )
         end
@@ -404,8 +405,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
 
         it "includes the commit in the commits URL" do
-          expect(builder.commits_url).
-            to eq(
+          expect(builder.commits_url)
+            .to eq(
               "https://github.com/actions/checkout/commits/" \
               "aabbfeb2ce60b5bd82389903509092c4648a9713"
             )
@@ -438,8 +439,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
 
         it "includes the previous ref and new version in the compare URL" do
-          expect(builder.commits_url).
-            to eq(
+          expect(builder.commits_url)
+            .to eq(
               "https://github.com/gocardless/business/compare/" \
               "v1.1.0...v1.8.0"
             )
@@ -472,8 +473,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
 
         it "includes the previous version and new commit in the compare URL" do
-          expect(builder.commits_url).
-            to eq(
+          expect(builder.commits_url)
+            .to eq(
               "https://github.com/gocardless/business/compare/" \
               "v1.1.0...aabbfeb2ce60b5bd82389903509092c4648a9713"
             )
@@ -484,9 +485,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         let(:dependency_previous_version) { nil }
 
         it "uses the new SHA1 hash to build the compare URL" do
-          expect(builder.commits_url).
-            to eq("https://github.com/gocardless/business/commits/" \
-                  "cd8274d15fa3ae2ab983129fb037999f264ba9a7")
+          expect(builder.commits_url)
+            .to eq("https://github.com/gocardless/business/commits/" \
+                   "cd8274d15fa3ae2ab983129fb037999f264ba9a7")
         end
       end
 
@@ -498,9 +499,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         let(:upload_pack_fixture) { "business" }
 
         it do
-          is_expected.
-            to eq("https://github.com/gocardless/business/compare/" \
-                  "7638417db6d59f3c431d3e1f261cc637155684cd...v1.4.0")
+          is_expected
+            .to eq("https://github.com/gocardless/business/compare/" \
+                   "7638417db6d59f3c431d3e1f261cc637155684cd...v1.4.0")
         end
 
         context "without credentials" do
@@ -520,14 +521,14 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
               url = "https://github.com/gocardless/business.git"
               exit_status = double(success?: false)
               allow(Open3).to receive(:capture3).and_call_original
-              allow(Open3).to receive(:capture3).
-                with(anything, "git ls-remote #{url}").
-                and_return(["", "", exit_status])
+              allow(Open3).to receive(:capture3)
+                .with(anything, "git ls-remote #{url}")
+                .and_return(["", "", exit_status])
             end
 
             it do
-              is_expected.
-                to eq("https://github.com/gocardless/business/commits")
+              is_expected
+                .to eq("https://github.com/gocardless/business/commits")
             end
           end
 
@@ -535,9 +536,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
             let(:upload_pack_fixture) { "business" }
 
             it do
-              is_expected.
-                to eq("https://github.com/gocardless/business/compare/" \
-                      "7638417db6d59f3c431d3e1f261cc637155684cd...v1.4.0")
+              is_expected
+                .to eq("https://github.com/gocardless/business/compare/" \
+                       "7638417db6d59f3c431d3e1f261cc637155684cd...v1.4.0")
             end
           end
         end
@@ -546,8 +547,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
           let(:dependency_previous_version) { nil }
 
           it "uses the reference specified" do
-            expect(builder.commits_url).
-              to eq("https://github.com/gocardless/business/commits/v1.4.0")
+            expect(builder.commits_url)
+              .to eq("https://github.com/gocardless/business/commits/v1.4.0")
           end
 
           context "but with a previously specified reference" do
@@ -566,8 +567,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
 
             it "uses the reference specified" do
               # TODO: Figure out if we need to do a pinend? check here
-              expect(builder.commits_url).
-                to eq(
+              expect(builder.commits_url)
+                .to eq(
                   "https://github.com/gocardless/business/compare/" \
                   "7638417...v1.4.0"
                 )
@@ -594,10 +595,10 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
       end
 
       before do
-        stub_request(:get, gitlab_repo_url).
-          to_return(status: 200,
-                    body: fixture("gitlab", "bump_repo.json"),
-                    headers: { "Content-Type" => "application/json" })
+        stub_request(:get, gitlab_repo_url)
+          .to_return(status: 200,
+                     body: fixture("gitlab", "bump_repo.json"),
+                     headers: { "Content-Type" => "application/json" })
       end
 
       context "with old and new tags" do
@@ -657,9 +658,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
 
         it "uses the credentials" do
           builder.commits_url
-          expect(WebMock).
-            to have_requested(:get, service_pack_url).
-            with(basic_auth: %w(greysteil secret_token))
+          expect(WebMock)
+            .to have_requested(:get, service_pack_url)
+            .with(basic_auth: %w(greysteil secret_token))
         end
       end
 
@@ -676,8 +677,8 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         let(:dependency_previous_version) { "0.3.0" }
 
         it "gets the right URL" do
-          is_expected.
-            to eq("https://bitbucket.org/org/business/commits/tag/v1.4.0")
+          is_expected
+            .to eq("https://bitbucket.org/org/business/commits/tag/v1.4.0")
         end
       end
 
@@ -696,6 +697,116 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
 
         it "gets the right URL" do
           is_expected.to eq("https://bitbucket.org/org/business/commits")
+        end
+      end
+    end
+
+    context "with a azure repo" do
+      let(:service_pack_url) do
+        "https://dev.azure.com/contoso/MyProject/_git/business/info/refs" \
+          "?service=git-upload-pack"
+      end
+
+      let(:source) do
+        Dependabot::Source.new(
+          provider: "azure",
+          repo: "contoso/MyProject/_git/#{dependency_name}"
+        )
+      end
+
+      context "with credentials" do
+        let(:credentials) do
+          [{
+            "type" => "git_source",
+            "host" => "github.com",
+            "username" => "x-access-token",
+            "password" => "token"
+          }, {
+            "type" => "git_source",
+            "host" => "dev.azure.com",
+            "username" => "greysteil",
+            "password" => "secret_token"
+          }]
+        end
+
+        it "uses the credentials" do
+          builder.commits_url
+          expect(WebMock)
+            .to have_requested(:get, service_pack_url)
+            .with(basic_auth: %w(greysteil secret_token))
+        end
+      end
+
+      context "with old and new tags" do
+        let(:dependency_previous_version) { "1.3.0" }
+
+        it "gets the right URL" do
+          is_expected.to eq("https://dev.azure.com/contoso/MyProject/_git/business/" \
+                            "branchCompare?baseVersion=GTv1.3.0&targetVersion=GTv1.4.0")
+        end
+      end
+
+      context "with only a new tag" do
+        let(:dependency_previous_version) { "0.3.0" }
+
+        it "gets the right URL" do
+          is_expected
+            .to eq("https://dev.azure.com/contoso/MyProject/_git/business/commits?itemVersion=GTv1.4.0")
+        end
+      end
+
+      context "with a dependency that has a git source" do
+        let(:dependency_previous_requirements) do
+          [{
+            file: "Gemfile",
+            requirement: ">= 0",
+            groups: [],
+            source: {
+              type: "git",
+              url: "https://dev.azure.com/contoso/MyProject/_git/#{dependency_name}"
+            }
+          }]
+        end
+        let(:dependency_requirements) { dependency_previous_requirements }
+
+        context "with old and new sha" do
+          let(:dependency_version) { "cd8274d15fa3ae2ab983129fb037999f264ba9a7" }
+          let(:dependency_previous_version) { "7638417db6d59f3c431d3e1f261cc637155684cd" }
+
+          it "gets the right URL" do
+            is_expected.to eq("https://dev.azure.com/contoso/MyProject/_git/business/" \
+                              "branchCompare?baseVersion=GC7638417db6d59f3c431d3e1f261cc637155684cd" \
+                              "&targetVersion=GCcd8274d15fa3ae2ab983129fb037999f264ba9a7")
+          end
+        end
+
+        context "with only a new sha" do
+          let(:dependency_version) { "cd8274d15fa3ae2ab983129fb037999f264ba9a7" }
+          let(:dependency_previous_version) { nil }
+
+          it "gets the right URL" do
+            is_expected
+              .to eq("https://dev.azure.com/contoso/MyProject/_git/business/commits" \
+                     "?itemVersion=GCcd8274d15fa3ae2ab983129fb037999f264ba9a7")
+          end
+        end
+      end
+
+      context "no tags" do
+        let(:dependency_previous_version) { "0.3.0" }
+        let(:dependency_version) { "0.5.0" }
+
+        it "gets the right URL" do
+          is_expected.to eq("https://dev.azure.com/contoso/MyProject/_git/business/commits")
+        end
+      end
+
+      context "no previous version" do
+        let(:dependency_previous_version) { nil }
+        let(:dependency_version) { "0.5.0" }
+
+        it "gets the right URL" do
+          is_expected.to eq("https://dev.azure.com/contoso/MyProject/_git/business/commits")
         end
       end
     end
@@ -817,9 +928,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
             )
           end
           before do
-            allow(builder).
-              to receive(:fetch_dependency_tags).
-              and_return(
+            allow(builder)
+              .to receive(:fetch_dependency_tags)
+              .and_return(
                 %w(
                   @pollyjs/ember-cli@0.2.1
                   @pollyjs/ember-cli@0.2.0
@@ -836,9 +947,9 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
           end
 
           before do
-            allow(builder).
-              to receive(:reliable_source_directory?).
-              and_return(true)
+            allow(builder)
+              .to receive(:reliable_source_directory?)
+              .and_return(true)
           end
 
           before do
@@ -920,10 +1031,10 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
 
         before do
-          stub_request(:get, bitbucket_compare_url).
-            to_return(status: 200,
-                      body: bitbucket_compare,
-                      headers: { "Content-Type" => "application/json" })
+          stub_request(:get, bitbucket_compare_url)
+            .to_return(status: 200,
+                       body: bitbucket_compare,
+                       headers: { "Content-Type" => "application/json" })
         end
 
         it "returns an array of commits" do
@@ -947,6 +1058,112 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
         end
       end
 
+      context "with a azure repo" do
+        let(:azure_compare_url) do
+          "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/business/commits" \
+            "?searchCriteria.itemVersion.versionType=tag" \
+            "&searchCriteria.itemVersion.version=v1.3.0" \
+            "&searchCriteria.compareVersion.versionType=tag" \
+            "&searchCriteria.compareVersion.version=v1.4.0"
+        end
+
+        let(:azure_compare) do
+          fixture("azure", "business_compare_commits.json")
+        end
+
+        let(:source) do
+          Dependabot::Source.new(
+            provider: "azure",
+            repo: "contoso/MyProject/_git/#{dependency_name}"
+          )
+        end
+        let(:service_pack_url) do
+          "https://dev.azure.com/contoso/MyProject/_git/business/info/refs" \
+            "?service=git-upload-pack"
+        end
+
+        before do
+          stub_request(:get, azure_compare_url)
+            .to_return(status: 200,
+                       body: azure_compare,
+                       headers: { "Content-Type" => "application/json" })
+        end
+
+        it "returns an array of commits" do
+          is_expected.to match_array(
+            [
+              {
+                message: "Merged PR 2: Deleted README.md",
+                sha: "9991b4f66def4c0a9ad8f9f27043ece7eddcf1c7",
+                html_url: "https://dev.azure.com/fabrikam/SomeGitProject/_git/SampleRepository/commit/" \
+                          "9991b4f66def4c0a9ad8f9f27043ece7eddcf1c7"
+              },
+              {
+                message: "Added README.md file",
+                sha: "4fa42e1a7b0215cc70cd4e927cb70c422123af84",
+                html_url: "https://dev.azure.com/fabrikam/SomeGitProject/_git/SampleRepository/commit/" \
+                          "4fa42e1a7b0215cc70cd4e927cb70c422123af84"
+              }
+            ]
+          )
+        end
+
+        context "with a dependency that has a git source" do
+          let(:dependency_previous_requirements) do
+            [{
+              file: "Gemfile",
+              requirement: ">= 0",
+              groups: [],
+              source: {
+                type: "git",
+                url: "https://dev.azure.com/contoso/MyProject/_git/#{dependency_name}"
+              }
+            }]
+          end
+          let(:dependency_requirements) { dependency_previous_requirements }
+          let(:dependency_version) { "cd8274d15fa3ae2ab983129fb037999f264ba9a7" }
+          let(:dependency_previous_version) { "7638417db6d59f3c431d3e1f261cc637155684cd" }
+          let(:azure_compare_url) do
+            "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/business/commits" \
+              "?searchCriteria.itemVersion.versionType=commit" \
+              "&searchCriteria.itemVersion.version=7638417db6d59f3c431d3e1f261cc637155684cd" \
+              "&searchCriteria.compareVersion.versionType=commit" \
+              "&searchCriteria.compareVersion.version=cd8274d15fa3ae2ab983129fb037999f264ba9a7"
+          end
+
+          it "returns an array of commits" do
+            is_expected.to match_array(
+              [
+                {
+                  message: "Merged PR 2: Deleted README.md",
+                  sha: "9991b4f66def4c0a9ad8f9f27043ece7eddcf1c7",
+                  html_url: "https://dev.azure.com/fabrikam/SomeGitProject/_git/SampleRepository/commit/" \
+                            "9991b4f66def4c0a9ad8f9f27043ece7eddcf1c7"
+                },
+                {
+                  message: "Added README.md file",
+                  sha: "4fa42e1a7b0215cc70cd4e927cb70c422123af84",
+                  html_url: "https://dev.azure.com/fabrikam/SomeGitProject/_git/SampleRepository/commit/" \
+                            "4fa42e1a7b0215cc70cd4e927cb70c422123af84"
+                }
+              ]
+            )
+          end
+
+          context "that 404s" do
+            before do
+              response = { message: "404 Project Not Found" }.to_json
+              stub_request(:get, azure_compare_url)
+                .to_return(status: 404,
+                           body: response,
+                           headers: { "Content-Type" => "application/json" })
+            end
+
+            it { is_expected.to eq([]) }
+          end
+        end
+      end
+
       context "with a gitlab repo" do
         let(:gitlab_compare_url) do
           "https://gitlab.com/api/v4/projects/org%2Fbusiness/repository/" \
@@ -967,10 +1184,10 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
           )
         end
         before do
-          stub_request(:get, gitlab_compare_url).
-            to_return(status: 200,
-                      body: gitlab_compare,
-                      headers: { "Content-Type" => "application/json" })
+          stub_request(:get, gitlab_compare_url)
+            .to_return(status: 200,
+                       body: gitlab_compare,
+                       headers: { "Content-Type" => "application/json" })
         end
 
         it "returns an array of commits" do
@@ -1034,10 +1251,10 @@ RSpec.describe Dependabot::MetadataFinders::Base::CommitsFinder do
                 "org%2Fbusiness/repository/compare" \
                 "?from=7638417db6d59f3c431d3e1f261cc637155684cd" \
                 "&to=cd8274d15fa3ae2ab983129fb037999f264ba9a7"
-              stub_request(:get, gitlab_compare_url).
-                to_return(status: 404,
-                          body: response,
-                          headers: { "Content-Type" => "application/json" })
+              stub_request(:get, gitlab_compare_url)
+                .to_return(status: 404,
+                           body: response,
+                           headers: { "Content-Type" => "application/json" })
             end
 
             it { is_expected.to eq([]) }

@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require "spec_helper"
@@ -45,25 +46,25 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
   let(:latest_resolvable_version_with_no_unlock) { latest_version }
   let(:latest_resolvable_previous_version) { dependency.version }
   before do
-    allow(updater_instance).
-      to receive(:latest_version).
-      and_return(latest_version)
+    allow(updater_instance)
+      .to receive(:latest_version)
+      .and_return(latest_version)
 
-    allow(updater_instance).
-      to receive(:latest_resolvable_version).
-      and_return(latest_resolvable_version)
+    allow(updater_instance)
+      .to receive(:latest_resolvable_version)
+      .and_return(latest_resolvable_version)
 
-    allow(updater_instance).
-      to receive(:latest_resolvable_version_with_no_unlock).
-      and_return(latest_resolvable_version_with_no_unlock)
+    allow(updater_instance)
+      .to receive(:latest_resolvable_version_with_no_unlock)
+      .and_return(latest_resolvable_version_with_no_unlock)
 
-    allow(updater_instance).
-      to receive(:latest_resolvable_previous_version).
-      and_return(latest_resolvable_previous_version)
+    allow(updater_instance)
+      .to receive(:latest_resolvable_previous_version)
+      .and_return(latest_resolvable_previous_version)
 
-    allow(updater_instance).
-      to receive(:updated_requirements).
-      and_return(updated_requirements)
+    allow(updater_instance)
+      .to receive(:updated_requirements)
+      .and_return(updated_requirements)
   end
 
   describe "#up_to_date?" do
@@ -229,8 +230,8 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
 
         it "doesn't attempt to resolve the dependency" do
           expect(updater_instance).to_not receive(:latest_resolvable_version)
-          expect(updater_instance).
-            to_not receive(:latest_resolvable_version_with_no_unlock)
+          expect(updater_instance)
+            .to_not receive(:latest_resolvable_version_with_no_unlock)
           can_update
         end
       end
@@ -287,8 +288,8 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
 
         it "doesn't attempt to resolve the dependency" do
           expect(updater_instance).to_not receive(:latest_resolvable_version)
-          expect(updater_instance).
-            to_not receive(:latest_version_resolvable_with_full_unlock?)
+          expect(updater_instance)
+            .to_not receive(:latest_version_resolvable_with_full_unlock?)
           can_update
         end
       end
@@ -301,18 +302,18 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
 
           context "even with a full unlock" do
             before do
-              allow(updater_instance).
-                to receive(:latest_version_resolvable_with_full_unlock?).
-                and_return(false)
+              allow(updater_instance)
+                .to receive(:latest_version_resolvable_with_full_unlock?)
+                .and_return(false)
             end
             it { is_expected.to be_falsey }
           end
 
           context "but can with a full unlock" do
             before do
-              allow(updater_instance).
-                to receive(:latest_version_resolvable_with_full_unlock?).
-                and_return(true)
+              allow(updater_instance)
+                .to receive(:latest_version_resolvable_with_full_unlock?)
+                .and_return(true)
             end
             it { is_expected.to be_truthy }
           end
@@ -436,7 +437,7 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
     end
     let(:latest_version) { Gem::Version.new("1.9.0") }
     let(:latest_resolvable_version) { Gem::Version.new("1.8.0") }
-    let(:latest_resolvable_version_with_no_unlock) { Gem::Version.new("1.7.0") }
+    let(:latest_resolvable_version_with_no_unlock) { "1.7.0" }
 
     its(:count) { is_expected.to eq(1) }
 
@@ -466,7 +467,7 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
       end
 
       context "when resolved from a requirement" do
-        let(:latest_resolvable_previous_version) { Gem::Version.new("1.4.0") }
+        let(:latest_resolvable_previous_version) { "1.4.0" }
 
         describe "the dependency" do
           subject { updated_dependencies.first }
@@ -490,6 +491,22 @@ RSpec.describe Dependabot::UpdateCheckers::Base do
         its(:package_manager) { is_expected.to eq(dependency.package_manager) }
         its(:name) { is_expected.to eq(dependency.name) }
         its(:requirements) { is_expected.to eq(original_requirements) }
+      end
+
+      context "without a previous version" do
+        let(:dependency) do
+          Dependabot::Dependency.new(
+            name: "business",
+            version: nil,
+            requirements: original_requirements,
+            package_manager: "dummy"
+          )
+        end
+
+        describe "the dependency" do
+          subject { updated_dependencies.first }
+          it { is_expected.to be_nil }
+        end
       end
     end
   end

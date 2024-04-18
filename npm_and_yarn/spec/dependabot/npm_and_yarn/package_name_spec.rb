@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 require "spec_helper"
@@ -26,9 +27,9 @@ RSpec.describe Dependabot::NpmAndYarn::PackageName do
 
       expect { described_class.new("🤷") }.to raise_error(described_class::InvalidPackageName)
 
-      expect { described_class.new(nil) }.to raise_error(described_class::InvalidPackageName)
-      expect { described_class.new([]) }.to raise_error(described_class::InvalidPackageName)
-      expect { described_class.new({}) }.to raise_error(described_class::InvalidPackageName)
+      expect { described_class.new(nil) }.to raise_error(TypeError)
+      expect { described_class.new([]) }.to raise_error(TypeError)
+      expect { described_class.new({}) }.to raise_error(TypeError)
     end
   end
 
@@ -157,8 +158,8 @@ RSpec.describe Dependabot::NpmAndYarn::PackageName do
     it "allows for comparison with types packages" do
       library = described_class.new("my-library")
 
-      expect([library, library.types_package_name].sort).
-        to eq([library.types_package_name, library])
+      expect([library, library.types_package_name].sort)
+        .to eq([library.types_package_name, library])
     end
   end
 end

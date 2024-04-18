@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 #######################################################
@@ -43,8 +44,10 @@ module Dependabot
 
         private
 
-        attr_reader :requirements, :latest_version, :source_url,
-                    :properties_to_update
+        attr_reader :requirements
+        attr_reader :latest_version
+        attr_reader :source_url
+        attr_reader :properties_to_update
 
         def update_requirement(req_string)
           if req_string.include?(".+")
@@ -56,8 +59,8 @@ module Dependabot
         end
 
         def update_exact_requirement(req_string)
-          old_version = requirement_class.new(req_string).
-                        requirements.first.last
+          old_version = requirement_class.new(req_string)
+                                         .requirements.first.last
           req_string.gsub(old_version.to_s, latest_version.to_s)
         end
 

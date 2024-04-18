@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 require "dependabot/elm/version"
@@ -9,8 +10,8 @@ module Dependabot
     class UpdateChecker
       class RequirementsUpdater
         RANGE_REQUIREMENT_REGEX =
-          /(\d+\.\d+\.\d+) <= v < (\d+\.\d+\.\d+)/.freeze
-        SINGLE_VERSION_REGEX = /\A(\d+\.\d+\.\d+)\z/.freeze
+          /(\d+\.\d+\.\d+) <= v < (\d+\.\d+\.\d+)/
+        SINGLE_VERSION_REGEX = /\A(\d+\.\d+\.\d+)\z/
 
         def initialize(requirements:, latest_resolvable_version:)
           @requirements = requirements
@@ -37,7 +38,8 @@ module Dependabot
 
         private
 
-        attr_reader :requirements, :latest_resolvable_version
+        attr_reader :requirements
+        attr_reader :latest_resolvable_version
 
         def update_requirement(old_req, new_version)
           if requirement_class.new(old_req).satisfied_by?(new_version)

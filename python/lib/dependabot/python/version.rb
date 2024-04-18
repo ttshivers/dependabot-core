@@ -1,7 +1,8 @@
+# typed: true
 # frozen_string_literal: true
 
+require "dependabot/version"
 require "dependabot/utils"
-require "rubygems_version_patch"
 
 # Python versions can include a local version identifier, which Ruby can't
 # parse. This class augments Gem::Version with local version identifier info.
@@ -9,7 +10,7 @@ require "rubygems_version_patch"
 
 module Dependabot
   module Python
-    class Version < Gem::Version
+    class Version < Dependabot::Version
       attr_reader :epoch
       attr_reader :local_version
       attr_reader :post_release_version
@@ -18,7 +19,7 @@ module Dependabot
       VERSION_PATTERN = 'v?([1-9][0-9]*!)?[0-9]+[0-9a-zA-Z]*(?>\.[0-9a-zA-Z]+)*' \
                         '(-[0-9A-Za-z]+(\.[0-9a-zA-Z]+)*)?' \
                         '(\+[0-9a-zA-Z]+(\.[0-9a-zA-Z]+)*)?'
-      ANCHORED_VERSION_PATTERN = /\A\s*(#{VERSION_PATTERN})?\s*\z/.freeze
+      ANCHORED_VERSION_PATTERN = /\A\s*(#{VERSION_PATTERN})?\s*\z/
 
       def self.correct?(version)
         return false if version.nil?
@@ -28,7 +29,7 @@ module Dependabot
 
       def initialize(version)
         @version_string = version.to_s
-        version, @local_version = version.split("+")
+        version, @local_version = @version_string.split("+")
         version ||= ""
         version = version.gsub(/^v/, "")
         if version.include?("!")
@@ -58,7 +59,7 @@ module Dependabot
         return epoch_comparison unless epoch_comparison.zero?
 
         version_comparison = super(other)
-        return version_comparison unless version_comparison.zero?
+        return version_comparison unless version_comparison&.zero?
 
         post_version_comparison = post_version_comparison(other)
         return post_version_comparison unless post_version_comparison.zero?
@@ -95,7 +96,7 @@ module Dependabot
 
         local_comparison = Gem::Version.new(lhs) <=> Gem::Version.new(rhs)
 
-        return local_comparison unless local_comparison.zero?
+        return local_comparison unless local_comparison&.zero?
 
         lhsegments.count <=> rhsegments.count
       end
@@ -106,20 +107,20 @@ module Dependabot
         # Further, Python treats dashes as a separator between version
         # parts and treats the alphabetical characters in strings as the
         # start of a new version part (so 1.1a2 == 1.1.alpha.2).
-        version.
-          gsub("alpha", "a").
-          gsub("beta", "b").
-          gsub("preview", "c").
-          gsub("pre", "c").
-          gsub("post", "r").
-          gsub("rev", "r").
-          gsub(/([\d.\-_])rc([\d.\-_])?/, '\1c\2').
-          tr("-", ".").
-          gsub(/(\d)([a-z])/i, '\1.\2')
+        version
+          .gsub("alpha", "a")
+          .gsub("beta", "b")
+          .gsub("preview", "c")
+          .gsub("pre", "c")
+          .gsub("post", "r")
+          .gsub("rev", "r")
+          .gsub(/([\d.\-_])rc([\d.\-_])?/, '\1c\2')
+          .tr("-", ".")
+          .gsub(/(\d)([a-z])/i, '\1.\2')
       end
     end
   end
 end
 
-Dependabot::Utils.
-  register_version_class("pip", Dependabot::Python::Version)
+Dependabot::Utils
+  .register_version_class("pip", Dependabot::Python::Version)

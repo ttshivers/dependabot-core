@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 require "dependabot/bundler/file_updater"
@@ -27,20 +28,21 @@ module Dependabot
 
         private
 
-        attr_reader :dependencies, :gemspec
+        attr_reader :dependencies
+        attr_reader :gemspec
 
         def replace_gemspec_version_requirement(gemspec, dependency, content)
           return content unless requirement_changed?(gemspec, dependency)
 
           updated_requirement =
-            dependency.requirements.
-            find { |r| r[:file] == gemspec.name }.
-            fetch(:requirement)
+            dependency.requirements
+                      .find { |r| r[:file] == gemspec.name }
+                      .fetch(:requirement)
 
           previous_requirement =
-            dependency.previous_requirements.
-            find { |r| r[:file] == gemspec.name }.
-            fetch(:requirement)
+            dependency.previous_requirements
+                      .find { |r| r[:file] == gemspec.name }
+                      .fetch(:requirement)
 
           RequirementReplacer.new(
             dependency: dependency,

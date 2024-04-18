@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require "spec_helper"
@@ -76,7 +77,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
       end
     end
 
-    context "with a private module with v prefix" do
+    context "with a private module with v-prefix" do
       let(:project_name) { "private_module_with_v_prefix" }
 
       let(:dependencies) do
@@ -110,13 +111,82 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
         ]
       end
 
-      it "updates the private module version and drops the v prefix" do
+      it "updates the private module version and drops the v-prefix" do
         updated_file = subject.find { |file| file.name == "main.tf" }
 
         expect(updated_file.content).to include(<<~HCL)
           module "s3-webapp" {
             source  = "app.terraform.io/example-org-5d3190/s3-webapp/aws"
             version = "2.0.0"
+          }
+        HCL
+      end
+    end
+
+    context "with private modules with different versions" do
+      let(:project_name) { "private_modules_with_different_versions" }
+
+      let(:dependencies) do
+        [
+          Dependabot::Dependency.new(
+            name: "example-org-5d3190/s3-webapp/aws",
+            version: "0.11.0",
+            previous_version: "0.9.1",
+            requirements: [{
+              requirement: "0.11.0",
+              groups: [],
+              file: "main.tf",
+              source: {
+                type: "registry",
+                registry_hostname: "app.terraform.io",
+                module_identifier: "example-org-5d3190/s3-webapp/aws"
+              }
+            }, {
+              requirement: "0.11.0",
+              groups: [],
+              file: "main.tf",
+              source: {
+                type: "registry",
+                registry_hostname: "app.terraform.io",
+                module_identifier: "example-org-5d3190/s3-webapp/aws"
+              }
+            }],
+            previous_requirements: [{
+              requirement: "0.9.1",
+              groups: [],
+              file: "main.tf",
+              source: {
+                type: "registry",
+                registry_hostname: "app.terraform.io",
+                module_identifier: "example-org-5d3190/s3-webapp/aws"
+              }
+            }, {
+              requirement: "0.11.0",
+              groups: [],
+              file: "main.tf",
+              source: {
+                type: "registry",
+                registry_hostname: "app.terraform.io",
+                module_identifier: "example-org-5d3190/s3-webapp/aws"
+              }
+            }],
+            package_manager: "terraform"
+          )
+        ]
+      end
+
+      it "updates all private modules versions" do
+        updated_file = subject.find { |file| file.name == "main.tf" }
+
+        expect(updated_file.content).to include(<<~HCL)
+          module "s3-webapp-first" {
+            source  = "app.terraform.io/example-org-5d3190/s3-webapp/aws"
+            version = "0.11.0"
+          }
+
+          module "s3-webapp-second" {
+            source  = "app.terraform.io/example-org-5d3190/s3-webapp/aws"
+            version = "0.11.0"
           }
         HCL
       end
@@ -392,7 +462,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
         end
       end
 
-      context "with a legacy registry dependency with v prefix" do
+      context "with a legacy registry dependency with v-prefix" do
         let(:project_name) { "registry_with_v_prefix" }
         let(:dependencies) do
           [
@@ -425,7 +495,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
           ]
         end
 
-        it "updates the requirement and drops the v prefix" do
+        it "updates the requirement and drops the v-prefix" do
           updated_file = subject.find { |file| file.name == "main.tf" }
 
           expect(updated_file.content).to include(
@@ -485,7 +555,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
       end
     end
 
-    context "with an hcl2-based registry dependency with a v prefix" do
+    context "with an hcl2-based registry dependency with a v-prefix" do
       let(:project_name) { "registry_012_with_v_prefix" }
       let(:dependencies) do
         [
@@ -518,7 +588,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
         ]
       end
 
-      it "updates the requirement and drops the v prefix" do
+      it "updates the requirement and drops the v-prefix" do
         updated_file = subject.find { |file| file.name == "main.tf" }
 
         expect(updated_file.content).to include(
@@ -1106,7 +1176,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
       end
     end
 
-    describe "for a nested module with a v prefix" do
+    describe "for a nested module with a v-prefix" do
       let(:project_name) { "nested_modules_with_v_prefix" }
       let(:dependencies) do
         [
@@ -1139,7 +1209,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
         ]
       end
 
-      it "updates the requirement and drops the v prefix" do
+      it "updates the requirement and drops the v-prefix" do
         updated_file = subject.find { |file| file.name == "main.tf" }
 
         expect(updated_file.content).to include(
@@ -1246,7 +1316,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
       end
     end
 
-    describe "when updating a module with a v prefix in a project with a provider lockfile" do
+    describe "when updating a module with a v-prefix in a project with a provider lockfile" do
       let(:project_name) { "lockfile_with_modules_with_v_prefix" }
       let(:dependencies) do
         [
@@ -1279,7 +1349,7 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
         ]
       end
 
-      it "updates the module version and drops the v prefix" do
+      it "updates the module version and drops the v-prefix" do
         module_file = subject.find { |file| file.name == "caf_module.tf" }
 
         expect(module_file.content).to include(
@@ -1513,6 +1583,45 @@ RSpec.describe Dependabot::Terraform::FileUpdater do
               version     = "0.0.10"
           DEP
         )
+      end
+    end
+
+    describe "when provider version precedes its source" do
+      let(:project_name) { "provider_version_preceed" }
+      let(:dependencies) do
+        [
+          Dependabot::Dependency.new(
+            name: "hashicorp/azurerm",
+            version: "3.40.0",
+            previous_version: "3.30.0",
+            requirements: [{
+              requirement: "3.40.0",
+              groups: [],
+              file: "providers.tf",
+              source: {
+                type: "provider",
+                registry_hostname: "registry.terraform.io",
+                module_identifier: "hashicorp/azurerm"
+              }
+            }],
+            previous_requirements: [{
+              requirement: "3.31.0",
+              groups: [],
+              file: "providers.tf",
+              source: {
+                type: "provider",
+                registry_hostname: "registry.terraform.io",
+                module_identifier: "hashicorp/azurerm"
+              }
+            }],
+            package_manager: "terraform"
+          )
+        ]
+      end
+
+      it "parses correctly and updates the module version" do
+        updated_file = subject.find { |file| file.name == "providers.tf" }
+        expect(updated_file.content).to include("version = \"3.40.0\"")
       end
     end
 

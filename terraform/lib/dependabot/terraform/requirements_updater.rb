@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 ####################################################################
@@ -80,7 +81,9 @@ module Dependabot
 
       private
 
-      attr_reader :requirements, :latest_version, :tag_for_latest_version
+      attr_reader :requirements
+      attr_reader :latest_version
+      attr_reader :tag_for_latest_version
 
       def update_git_requirement(req)
         return req unless req.dig(:source, :ref)
@@ -109,8 +112,8 @@ module Dependabot
 
       # Updates the version in a "~>" constraint to allow the given version
       def update_twiddle_version(req_string)
-        old_version = requirement_class.new(req_string).
-                      requirements.first.last
+        old_version = requirement_class.new(req_string)
+                                       .requirements.first.last
         updated_version = at_same_precision(latest_version, old_version)
         req_string.sub(old_version.to_s, updated_version)
       end
@@ -137,9 +140,9 @@ module Dependabot
         new_release =
           new_version.to_s.split(".").first(release_precision)
         new_prerelease =
-          new_version.to_s.split(".").
-          drop_while { |i| i.match?(/^\d+$/) }.
-          first([prerelease_precision, 1].max)
+          new_version.to_s.split(".")
+                     .drop_while { |i| i.match?(/^\d+$/) }
+                     .first([prerelease_precision, 1].max)
 
         [*new_release, *new_prerelease].join(".")
       end

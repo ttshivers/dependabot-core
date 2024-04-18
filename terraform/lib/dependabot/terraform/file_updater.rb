@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require "dependabot/file_updaters"
@@ -11,9 +12,9 @@ module Dependabot
     class FileUpdater < Dependabot::FileUpdaters::Base
       include FileSelector
 
-      PRIVATE_MODULE_ERROR = /Could not download module.*code from\n.*\"(?<repo>\S+)\":/.freeze
-      MODULE_NOT_INSTALLED_ERROR =  /Module not installed.*module\s*\"(?<mod>\S+)\"/m.freeze
-      GIT_HTTPS_PREFIX = %r{^git::https://}.freeze
+      PRIVATE_MODULE_ERROR = /Could not download module.*code from\n.*\"(?<repo>\S+)\":/
+      MODULE_NOT_INSTALLED_ERROR =  /Module not installed.*module\s*\"(?<mod>\S+)\"/m
+      GIT_HTTPS_PREFIX = %r{^git::https://}
 
       def self.updated_files_regex
         [/\.tf$/, /\.hcl$/]
@@ -35,8 +36,8 @@ module Dependabot
         end
         updated_lockfile_content = update_lockfile_declaration(updated_files)
 
-        if updated_lockfile_content && lock_file.content != updated_lockfile_content
-          updated_files << updated_file(file: lock_file, content: updated_lockfile_content)
+        if updated_lockfile_content && lockfile.content != updated_lockfile_content
+          updated_files << updated_file(file: lockfile, content: updated_lockfile_content)
         end
 
         updated_files.compact!
@@ -48,11 +49,35 @@ module Dependabot
 
       private
 
+      # Terraform allows to use a module from the same source multiple times
+      # To detect any changes in dependencies we need to overwrite an implementation from the base class
+      #
+      # Example (for simplicity other parameters are skipped):
+      # previous_requirements = [{requirement: "0.9.1"}, {requirement: "0.11.0"}]
+      # requirements = [{requirement: "0.11.0"}, {requirement: "0.11.0"}]
+      #
+      # Simple difference between arrays gives:
+      # requirements - previous_requirements
+      #  => []
+      # which loses an information that one of our requirements has changed.
+      #
+      # By using symmetric difference:
+      # (requirements - previous_requirements) | (previous_requirements - requirements)
+      #  => [{requirement: "0.9.1"}]
+      # we can detect that change.
+      def requirement_changed?(file, dependency)
+        changed_requirements =
+          (dependency.requirements - dependency.previous_requirements) |
+          (dependency.previous_requirements - dependency.requirements)
+
+        changed_requirements.any? { |f| f[:file] == file.name }
+      end
+
       def updated_terraform_file_content(file)
         content = file.content.dup
 
-        reqs = dependency.requirements.zip(dependency.previous_requirements).
-               reject { |new_req, old_req| new_req == old_req }
+        reqs = dependency.requirements.zip(dependency.previous_requirements)
+                         .reject { |new_req, old_req| new_req == old_req }
 
         # Loop through each changed requirement and update the files and lockfile
         reqs.each do |new_req, old_req|
@@ -88,8 +113,12 @@ module Dependabot
       end
 
       def update_registry_declaration(new_req, old_req, updated_content)
-        regex = new_req[:source][:type] == "provider" ? provider_declaration_regex : registry_declaration_regex
-        updated_content.sub!(regex) do |regex_match|
+        regex = if new_req[:source][:type] == "provider"
+                  provider_declaration_regex(updated_content)
+                else
+                  registry_declaration_regex
+                end
+        updated_content.gsub!(regex) do |regex_match|
           regex_match.sub(/^\s*version\s*=.*/) do |req_line_match|
             req_line_match.sub(old_req[:requirement], new_req[:requirement])
           end
@@ -97,19 +126,19 @@ module Dependabot
       end
 
       def extract_provider_h1_hashes(content, declaration_regex)
-        content.match(declaration_regex).to_s.
-          match(hashes_object_regex).to_s.
-          split("\n").map { |hash| hash.match(hashes_string_regex).to_s }.
-          select { |h| h&.match?(/^h1:/) }
+        content.match(declaration_regex).to_s
+               .match(hashes_object_regex).to_s
+               .split("\n").map { |hash| hash.match(hashes_string_regex).to_s }
+               .select { |h| h&.match?(/^h1:/) }
       end
 
       def remove_provider_h1_hashes(content, declaration_regex)
-        content.match(declaration_regex).to_s.
-          sub(hashes_object_regex, "")
+        content.match(declaration_regex).to_s
+               .sub(hashes_object_regex, "")
       end
 
       def lockfile_details(new_req)
-        content = lock_file.content.dup
+        content = lockfile.content.dup
         provider_source = new_req[:source][:registry_hostname] + "/" + new_req[:source][:module_identifier]
         declaration_regex = lockfile_declaration_regex(provider_source)
 
@@ -119,7 +148,7 @@ module Dependabot
       def lookup_hash_architecture # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/PerceivedComplexity
         new_req = dependency.requirements.first
 
-        # NOTE: Only providers are inlcuded in the lockfile, modules are not
+        # NOTE: Only providers are included in the lockfile, modules are not
         return unless new_req[:source][:type] == "provider"
 
         architectures = []
@@ -149,7 +178,10 @@ module Dependabot
             # Terraform will update the lockfile in place so we use a fresh lockfile for each lookup
             File.write(".terraform.lock.hcl", lockfile_hash_removed)
 
-            SharedHelpers.run_shell_command("terraform providers lock -platform=#{arch} #{provider_source} -no-color")
+            SharedHelpers.run_shell_command(
+              "terraform providers lock -platform=#{arch} #{provider_source} -no-color",
+              fingerprint: "terraform providers lock -platform=<arch> <provider_source> -no-color"
+            )
 
             updated_lockfile = File.read(".terraform.lock.hcl")
             updated_hashes = extract_provider_h1_hashes(updated_lockfile, declaration_regex)
@@ -185,10 +217,10 @@ module Dependabot
       end
 
       def update_lockfile_declaration(updated_manifest_files) # rubocop:disable Metrics/AbcSize, Metrics/PerceivedComplexity
-        return if lock_file.nil?
+        return if lockfile.nil?
 
         new_req = dependency.requirements.first
-        # NOTE: Only providers are inlcuded in the lockfile, modules are not
+        # NOTE: Only providers are included in the lockfile, modules are not
         return unless new_req[:source][:type] == "provider"
 
         content, provider_source, declaration_regex = lockfile_details(new_req)
@@ -204,7 +236,10 @@ module Dependabot
 
           File.write(".terraform.lock.hcl", lockfile_dependency_removed)
 
-          SharedHelpers.run_shell_command("terraform providers lock #{platforms} #{provider_source}")
+          SharedHelpers.run_shell_command(
+            "terraform providers lock #{platforms} #{provider_source}",
+            fingerprint: "terraform providers lock <platforms> <provider_source>"
+          )
 
           updated_lockfile = File.read(".terraform.lock.hcl")
           updated_dependency = updated_lockfile.scan(declaration_regex).first
@@ -277,12 +312,23 @@ module Dependabot
         /(?<=\").*(?=\")/
       end
 
-      def provider_declaration_regex
+      def provider_declaration_regex(updated_content)
         name = Regexp.escape(dependency.name)
-        %r{
-          ((source\s*=\s*["'](#{Regexp.escape(registry_host_for(dependency))}/)?#{name}["']|\s*#{name}\s*=\s*\{.*)
+        registry_host = Regexp.escape(registry_host_for(dependency))
+        regex_version_preceeds = %r{
+          (((?<!required_)version\s=\s*["'].*["'])
+          (\s*source\s*=\s*["'](#{registry_host}/)?#{name}["']|\s*#{name}\s*=\s*\{.*))
+        }mx
+        regex_source_preceeds = %r{
+          ((source\s*=\s*["'](#{registry_host}/)?#{name}["']|\s*#{name}\s*=\s*\{.*)
           (?:(?!^\}).)+)
         }mx
+
+        if updated_content.match(regex_version_preceeds)
+          regex_version_preceeds
+        else
+          regex_source_preceeds
+        end
       end
 
       def registry_declaration_regex
@@ -328,5 +374,5 @@ module Dependabot
   end
 end
 
-Dependabot::FileUpdaters.
-  register("terraform", Dependabot::Terraform::FileUpdater)
+Dependabot::FileUpdaters
+  .register("terraform", Dependabot::Terraform::FileUpdater)

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 module Dependabot
@@ -9,11 +10,11 @@ module Dependabot
       # newest version we support
       DEFAULT = V2
       # If we are updating a project with a Gemfile.lock that does not specify
-      # the version it was bundled with, with failover to V1 on the assumption
+      # the version it was bundled with, we failover to V1 on the assumption
       # it was created with an old version that didn't add this information
       FAILOVER = V1
 
-      BUNDLER_MAJOR_VERSION_REGEX = /BUNDLED WITH\s+(?<version>\d+)\./m.freeze
+      BUNDLER_MAJOR_VERSION_REGEX = /BUNDLED WITH\s+(?<version>\d+)\./m
 
       def self.bundler_version(lockfile)
         return DEFAULT unless lockfile
@@ -29,9 +30,9 @@ module Dependabot
         return "unknown" unless lockfile
 
         if (matches = lockfile.content.match(BUNDLER_MAJOR_VERSION_REGEX))
-          matches[:version]
+          matches[:version].to_i.to_s
         else
-          "1"
+          "unspecified"
         end
       end
     end
